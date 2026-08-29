@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "taskflow": {
+      "command": "node",
+      "args": [
+        "--env-file=${workspaceFolder}/mcp/taskflow-mcp/.env",
+        "${workspaceFolder}/mcp/taskflow-mcp/index.js"
+      ]
+    }
+  }
+}
