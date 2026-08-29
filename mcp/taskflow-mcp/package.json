@@ -1,0 +1,16 @@
+{
+  "name": "taskflow-mcp",
+  "version": "1.0.0",
+  "description": "Read-only MCP server for IBM Bob to query TaskFlow tickets",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.15.1"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
