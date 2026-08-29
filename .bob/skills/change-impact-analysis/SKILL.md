@@ -10,7 +10,11 @@ description: >-
 
 Before any implementation begins, analyze the requested change against the current TaskFlow application.
 
-The source code, tests, database schema, AGENTS.md files, and current project documentation are the primary sources of truth.
+The change request and its comments are the primary sources of truth for business requirements and approved clarifications.
+
+The source code, automated tests, database schema, AGENTS.md files, and current project documentation are the primary sources of truth for the existing technical implementation.
+
+Before creating assumptions, check whether the change request or its comments already contain an approved clarification. Approved clarifications from the request must take precedence over inferred assumptions.
 
 Do not modify application code while executing this skill.
 
@@ -42,7 +46,19 @@ For every change request:
 
 8. Identify existing automated tests that may be affected and new tests that should be created.
 
-9. Identify documentation that must be updated if the change is implemented.
+9. Analyze documentation impact.
+
+   Before deciding which documentation must change, inspect the actual documentation currently present in the repository, especially the docs/ directory and relevant AGENTS.md files.
+
+   Identify the exact existing documentation files affected by the change and explain what information would become outdated.
+
+   Do not use generic statements such as "API documentation if any" when an actual documentation file exists.
+
+   For TaskFlow, explicitly verify whether changes affect documents such as:
+   - docs/api.md
+   - docs/developer-onboarding.md
+   - docs/overview.md
+   - AGENTS.md files
 
 10. Assign a risk level:
     - LOW
