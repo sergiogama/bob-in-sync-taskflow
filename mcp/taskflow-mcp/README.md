@@ -13,7 +13,7 @@ IBM Bob (Claude)
 taskflow-mcp (Node.js)           ← este servidor
     │  HTTP / Bearer token
     ▼
-TaskFlow REST API  (http://127.0.0.1:3101)
+TaskFlow REST API  (http://127.0.0.1:3001)
     │
     ▼
 SQLite  (data/taskflow.db)
@@ -36,7 +36,7 @@ npm install
 
 | Variável             | Obrigatória | Padrão                   | Descrição                                  |
 |----------------------|-------------|---------------------------|--------------------------------------------|
-| `TASKFLOW_API_URL`   | Não         | `http://127.0.0.1:3101`  | URL base da API do TaskFlow                |
+| `TASKFLOW_API_URL`   | Não         | `http://127.0.0.1:3001`  | URL base da API do TaskFlow                |
 | `TASKFLOW_EMAIL`     | **Sim**     | —                         | E-mail da conta usada para autenticar      |
 | `TASKFLOW_PASSWORD`  | **Sim**     | —                         | Senha da conta usada para autenticar       |
 
@@ -178,7 +178,7 @@ O servidor está registrado em `.bob/mcp.json` (escopo de projeto) com transport
       "command": "node",
       "args": ["mcp/taskflow-mcp/index.js"],
       "env": {
-        "TASKFLOW_API_URL": "http://127.0.0.1:3101",
+        "TASKFLOW_API_URL": "http://127.0.0.1:3001",
         "TASKFLOW_EMAIL": "<definido no ambiente ou .env>",
         "TASKFLOW_PASSWORD": "<definido no ambiente ou .env>"
       }

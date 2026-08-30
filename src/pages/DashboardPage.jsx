@@ -17,6 +17,7 @@ export default function DashboardPage() {
       <div className="page-header"><div><h1>Dashboard</h1><p>Maintenance request overview</p></div><Link className="button primary" to="/tickets/new">New ticket</Link></div>
       <section className="metrics" aria-label="Ticket status summary">
         {statuses.map((status) => <Link to={`/tickets?status=${status}`} className={`metric metric-${status.toLowerCase()}`} key={status}><span>{statusLabels[status]}</span><strong>{data.counts[status]}</strong><small>View tickets</small></Link>)}
+        <Link to="/tickets?status=OPEN" className="metric metric-stale"><span>Stale</span><strong>{data.counts.stale}</strong><small>View tickets</small></Link>
       </section>
       <section className="panel">
         <div className="panel-header"><div><h2>Recently updated</h2><p>Latest maintenance request activity</p></div><Link to="/tickets" className="secondary-link">View all tickets</Link></div>

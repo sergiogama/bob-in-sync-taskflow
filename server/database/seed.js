@@ -6,21 +6,22 @@ const users = [
   ['Priya Nair', 'priya.nair@taskflow.local', 'Developer'],
   ['Robert Chen', 'robert.chen@taskflow.local', 'Manager'],
   ['Elena Rossi', 'elena.rossi@taskflow.local', 'Analyst'],
+  ['IBM Bob', 'ibm.bob@taskflow.local', 'Developer'],
 ];
 
 const tickets = [
-  ['Invoice import failing for EMEA batch', 'The nightly EMEA invoice file stops on records containing a comma in the supplier name.', 'IN_PROGRESS', 2, 1],
-  ['User unable to reset password', 'Password reset email is not received by users in the Finance distribution group.', 'OPEN', null, 5],
-  ['Customer report export error', 'Quarterly customer activity report returns an error when exported to CSV.', 'IN_PROGRESS', 3, 1],
-  ['Authentication timeout in service portal', 'Several users are redirected to sign-in after five minutes of activity.', 'OPEN', 2, 5],
-  ['Incorrect value displayed on dashboard', 'Operations dashboard shows the previous day total for completed orders.', 'RESOLVED', 3, 1],
-  ['Update tax code reference data', 'Add the approved FY2026 tax codes to the billing application reference table.', 'CLOSED', 2, 1],
-  ['Purchase order attachment not opening', 'PDF attachments uploaded before July cannot be opened from the purchase order screen.', 'OPEN', null, 5],
-  ['Employee directory search misses results', 'Searching with a hyphenated surname does not return matching employees.', 'RESOLVED', 3, 5],
-  ['Scheduled report delivered twice', 'The weekly inventory summary is being emailed twice to warehouse managers.', 'IN_PROGRESS', 2, 1],
-  ['Vendor address changes not saved', 'Address updates appear successful but revert after the vendor page is refreshed.', 'OPEN', 3, 5],
-  ['Legacy browser banner still displayed', 'The retirement banner remains visible after users move to a supported browser.', 'CLOSED', 2, 1],
-  ['Missing audit entries for profile updates', 'Audit history does not record department changes made by HR administrators.', 'RESOLVED', 3, 5],
+  ['Invoice import failing for EMEA batch', 'The nightly EMEA invoice file stops on records containing a comma in the supplier name.', 'IN_PROGRESS', 'SOFTWARE', 2, 1],
+  ['User unable to reset password', 'Password reset email is not received by users in the Finance distribution group.', 'OPEN', 'ACCESS', null, 5],
+  ['Customer report export error', 'Quarterly customer activity report returns an error when exported to CSV.', 'IN_PROGRESS', 'SOFTWARE', 3, 1],
+  ['Authentication timeout in service portal', 'Several users are redirected to sign-in after five minutes of activity.', 'OPEN', 'ACCESS', 2, 5],
+  ['Incorrect value displayed on dashboard', 'Operations dashboard shows the previous day total for completed orders.', 'RESOLVED', 'SOFTWARE', 3, 1],
+  ['Update tax code reference data', 'Add the approved FY2026 tax codes to the billing application reference table.', 'CLOSED', 'OTHER', 2, 1],
+  ['Purchase order attachment not opening', 'PDF attachments uploaded before July cannot be opened from the purchase order screen.', 'OPEN', 'SOFTWARE', null, 5],
+  ['Employee directory search misses results', 'Searching with a hyphenated surname does not return matching employees.', 'RESOLVED', 'SOFTWARE', 3, 5],
+  ['Scheduled report delivered twice', 'The weekly inventory summary is being emailed twice to warehouse managers.', 'IN_PROGRESS', 'OTHER', 2, 1],
+  ['Vendor address changes not saved', 'Address updates appear successful but revert after the vendor page is refreshed.', 'OPEN', 'SOFTWARE', 3, 5],
+  ['Legacy browser banner still displayed', 'The retirement banner remains visible after users move to a supported browser.', 'CLOSED', 'HARDWARE', 2, 1],
+  ['Missing audit entries for profile updates', 'Audit history does not record department changes made by HR administrators.', 'RESOLVED', 'ACCESS', 3, 5],
 ];
 
 const comments = [
@@ -41,8 +42,8 @@ export function seedDatabase(db) {
   const passwordHash = bcrypt.hashSync('taskflow123', 10);
   const insertUser = db.prepare('INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, ?)');
   const insertTicket = db.prepare(`
-    INSERT INTO tickets (title, description, status, owner_id, created_by_id, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, datetime('now', ?), datetime('now', ?))
+    INSERT INTO tickets (title, description, status, category, owner_id, created_by_id, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, datetime('now', ?), datetime('now', ?))
   `);
   const insertComment = db.prepare(`
     INSERT INTO comments (ticket_id, author_id, content, created_at)

@@ -46,7 +46,7 @@ h2 { font-size: 17px; color: #243447; margin-bottom: 5px; font-weight: 650; }
 .metric > span { display: block; color: #536171; font-size: 14px; font-weight: 600; }
 .metric strong { display: block; margin: 8px 0 6px; color: #1c2c3e; font-size: 31px; font-weight: 650; }
 .metric small { color: #718091; font-size: 12px; }
-.metric-open { border-top-color: #3975ad; }.metric-in_progress { border-top-color: #b87914; }.metric-resolved { border-top-color: #2d7d55; }.metric-closed { border-top-color: #64717f; }
+.metric-open { border-top-color: #3975ad; }.metric-in_progress { border-top-color: #b87914; }.metric-resolved { border-top-color: #2d7d55; }.metric-closed { border-top-color: #64717f; }.metric-stale { border-top-color: #b03a2e; }
 .panel { background: #fff; border: 1px solid var(--border); border-radius: 5px; box-shadow: 0 1px 2px #172b3f0a; }
 .panel-header { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 20px 22px; border-bottom: 1px solid #e5e9ee; }
 .secondary-link { color: #286398; font-size: 14px; font-weight: 600; text-decoration: none; }
@@ -60,6 +60,9 @@ tbody tr:hover { background: #fbfcfd; }
 .ticket-link span { color: #7a8794; font-size: 11px; font-weight: 600; }
 .status { display: inline-flex; padding: 4px 8px; border-radius: 3px; font-size: 11px; font-weight: 700; letter-spacing: .02em; white-space: nowrap; }
 .status-open { color: #245d92; background: #e6f0fa; }.status-in_progress { color: #84590e; background: #fff0ce; }.status-resolved { color: #246343; background: #dff1e7; }.status-closed { color: #53606c; background: #e9edf0; }
+.stale-badge { display: inline-flex; padding: 3px 7px; border-radius: 3px; font-size: 11px; font-weight: 700; letter-spacing: .02em; color: #8b1a10; background: #fde8e6; margin-left: 6px; }
+.stale-row td { background: #fffaf9; }
+.stale-row:hover td { background: #fff3f1 !important; }
 .muted { color: var(--muted); }
 .filters { display: flex; align-items: flex-end; gap: 16px; padding: 18px 20px; border-bottom: 1px solid var(--border); }
 .filters label { min-width: 200px; }.filters .search-field { flex: 1; max-width: 480px; }
