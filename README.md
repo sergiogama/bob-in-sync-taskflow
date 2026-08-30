@@ -4,11 +4,11 @@ TaskFlow is a small internal IT maintenance request management application used 
 
 The application represents a realistic software maintenance environment where analysts register change requests and developers investigate, implement, validate, and document them.
 
-**BOB IN SYNC** extends this workflow by connecting **IBM Bob** directly to TaskFlow and to the application source code.
+**BOB IN SYNC** extends this workflow by connecting **IBM Bob** directly to TaskFlow, the application source code, and a continuously maintained **Solution Guide**.
 
 > **From ticket to working code, with the developer in control.**
 
-BOB IN SYNC turns IBM Bob into an interactive change companion that helps developers understand unfamiliar applications, synchronize work with the system of record, assess requested changes, implement them safely, validate results, and keep application knowledge synchronized with the code.
+BOB IN SYNC turns IBM Bob into an interactive change companion that helps developers understand unfamiliar applications, synchronize work with the system of record, assess requested changes, implement them safely, validate results, and continuously maintain the technical knowledge that future developers and future Bob sessions use.
 
 ---
 
@@ -25,8 +25,9 @@ In these environments, developers often face:
 - time spent understanding impact before implementation begins
 - risk of changes being made without proper traceability
 - documentation becoming outdated after code changes
+- new squad members repeatedly rediscovering the same architecture and operational knowledge
 
-BOB IN SYNC addresses this gap by placing IBM Bob directly inside the maintenance workflow.
+BOB IN SYNC addresses this gap by placing IBM Bob directly inside the maintenance workflow and by maintaining a reusable **living knowledge layer** for the application.
 
 Instead of operating only as a coding assistant, Bob becomes a bridge between:
 
@@ -35,14 +36,14 @@ Business Request
       +
 System of Record
       +
-Application Knowledge
+Living Solution Knowledge
       +
 Source Code
       +
 Developer
 ```
 
-The goal is to make software changes easier to understand, safer to implement, and more traceable.
+The goal is to make software changes easier to understand, safer to implement, more traceable, and easier for future squad members to continue.
 
 ---
 
@@ -52,12 +53,14 @@ BOB IN SYNC combines:
 
 - **TaskFlow** — the system of record for maintenance requests
 - **IBM Bob** — the AI-powered software development environment
-- **Bob Skill** — a reusable workflow that guides software changes
-- **Model Context Protocol (MCP)** — the integration layer between IBM Bob and TaskFlow
+- **Change Workflow Skill** — guides a requested software change from ticket context to validated implementation
+- **Solution Knowledge Skill** — creates and continuously maintains the application Solution Guide
+- **Solution Guide** — living technical knowledge used for onboarding and as the first technical orientation for future changes
+- **Model Context Protocol (MCP)** — integration between IBM Bob and TaskFlow
 - **Application source code** — React, Node.js, Express, REST APIs, and SQLite
 - **Human-in-the-loop approval** — the developer remains in control before application code is changed
-- **Automated validation** — existing tests and build commands are used to validate the implementation
-- **Documentation synchronization** — affected technical knowledge is updated together with the implementation
+- **Automated validation** — existing tests and build commands are used to validate implementations
+- **Knowledge synchronization** — architecture, flows, risks, statistics, onboarding guidance, and other affected solution knowledge evolve together with the application
 
 The main workflow is:
 
@@ -70,9 +73,11 @@ TaskFlow MCP
       ↓
 Work Synchronization
       ↓
-Change Workflow Skill
+Solution Guide
       ↓
-Application Understanding
+Current Code Validation
+      ↓
+Change Workflow Skill
       ↓
 Change Brief
       ↓
@@ -82,14 +87,73 @@ Implementation
       ↓
 Tests / Build
       ↓
-Documentation Synchronization
+Solution Knowledge Skill
+      ↓
+Solution Guide Updated
 ```
+
+This allows every new change to start with maintained application knowledge instead of rediscovering the system from scratch.
+
+---
+
+## Living Solution Knowledge
+
+The living technical reference for TaskFlow is:
+
+```text
+docs/solution-guide/SOLUTION_GUIDE.md
+```
+
+The Solution Guide is designed to support both:
+
+- onboarding of new developers and squad members
+- technical orientation for every software change handled through BOB IN SYNC
+
+It contains structured information about:
+
+- solution purpose and target users
+- technology stack
+- application architecture
+- operational flows
+- core components
+- critical areas and change risks
+- data model
+- APIs and integrations
+- MCP capabilities
+- Bob Skills
+- repository-derived statistics
+- testing and validation
+- developer onboarding
+- change impact guidance
+- known risks and technical considerations
+- recent solution evolution
+- knowledge validation metadata
+
+### Source of Truth
+
+The Solution Guide is the preferred starting point for technical understanding, but it is **not** allowed to override the current implementation.
+
+The current:
+
+```text
+source code
+tests
+database schema
+configuration
+runtime behavior
+```
+
+remain the technical source of truth.
+
+When Bob works on a ticket, it uses the Solution Guide for orientation and then validates the relevant information against the current repository.
+
+If a discrepancy is found, the current implementation is treated as authoritative and the guide must be corrected.
 
 ---
 
 ## How IBM Bob Is Used
 
-A developer can start working on a TaskFlow request directly from IBM Bob using a natural instruction such as:
+A developer can start working on a TaskFlow request directly from IBM Bob using natural language such as:
 
 ```text
 I get TF-0010.
@@ -111,17 +175,23 @@ IBM Bob then:
 4. assigns the ticket to **IBM Bob**
 5. changes the ticket status to **IN_PROGRESS**
 6. adds a traceability comment to the ticket
-7. retrieves comments and relevant business context
-8. inspects the parts of the application that are relevant to the requested change
-9. produces a concise **Change Brief**
-10. presents the expected impact, implementation risk, and suggested approach
-11. asks the developer what to do next
-12. requires explicit human approval before modifying application code
-13. implements the change when approved
-14. runs the project's validation commands
-15. updates affected documentation
+7. retrieves ticket comments and relevant business context
+8. checks whether the Solution Guide exists
+9. creates the Solution Guide through `solution-knowledge` if it does not yet exist
+10. reads the relevant Solution Guide sections
+11. validates those sections against the current source code, tests, schema, and configuration
+12. inspects only the application areas relevant to the requested change
+13. produces a concise **Change Brief**
+14. presents confirmed business rules, impact, risk, and a suggested approach
+15. asks the developer what to do next
+16. requires explicit human approval before modifying application code
+17. implements the change when approved
+18. runs the project's validation commands
+19. invokes `solution-knowledge` after successful validation
+20. updates only the Solution Guide sections affected by the change
+21. maintains a compact change record when appropriate
 
-When work starts, TaskFlow records:
+When active work starts, TaskFlow records:
 
 ```text
 Owner: IBM Bob
@@ -141,22 +211,22 @@ The moment someone starts working with Bob, the system of record reflects that a
 
 BOB IN SYNC intentionally separates **starting development work** from **approving code changes**.
 
-When the developer asks Bob to work on a ticket, TaskFlow is synchronized immediately.
+When the developer asks Bob to actively work on a ticket, TaskFlow is synchronized immediately.
 
 However, IBM Bob does **not** modify application code until the developer explicitly approves implementation.
-
-This creates a simple governance model:
 
 ```text
 Developer starts work
         ↓
 TaskFlow is synchronized
         ↓
-Bob understands the request
+Solution Guide is loaded
         ↓
-Bob presents the Change Brief
+Current implementation is validated
         ↓
-Developer reviews the proposed work
+Bob produces the Change Brief
+        ↓
+Developer reviews the approach
         ↓
 Explicit approval
         ↓
@@ -165,15 +235,29 @@ Code implementation
 
 BOB IN SYNC also does **not** automatically mark tickets as `RESOLVED` or `CLOSED`.
 
-The ticket remains `IN_PROGRESS` after Bob finishes development because implementation is only one part of the delivery lifecycle.
+The ticket remains `IN_PROGRESS` after Bob finishes development because implementation is only one part of the enterprise delivery lifecycle.
 
 QA validation, homologation, and production promotion remain part of the organization's normal delivery process.
 
 ---
 
-## Bob Change Workflow Skill
+## Bob Skills
 
-The main reusable Bob Skill is located at:
+BOB IN SYNC intentionally uses two focused Skills.
+
+```text
+change-workflow
+      +
+solution-knowledge
+```
+
+Each Skill has one clear responsibility.
+
+---
+
+## Change Workflow Skill
+
+Location:
 
 ```text
 .bob/skills/change-workflow/SKILL.md
@@ -181,16 +265,19 @@ The main reusable Bob Skill is located at:
 
 The `change-workflow` Skill acts as an interactive software change companion.
 
-Its main responsibilities are:
+Its responsibilities include:
 
 - detect active work intent
 - retrieve the originating TaskFlow request
 - synchronize the start of work through MCP
+- ensure the Solution Guide exists
+- use the Solution Guide as initial technical orientation
+- validate relevant knowledge against the current implementation
 - understand the business request
 - identify material business ambiguities
 - inspect only relevant application components
-- review source code, tests, schema, APIs, and documentation when needed
-- use focused subagents when parallel investigation provides value
+- review source code, tests, schema, APIs, configuration, and documentation when required
+- use focused subagents when parallel investigation provides real value
 - create a concise Change Brief
 - identify implementation impact
 - classify implementation risk
@@ -199,20 +286,53 @@ Its main responsibilities are:
 - require explicit approval before code changes
 - implement focused changes
 - run tests and build validation
-- synchronize affected documentation
+- invoke `solution-knowledge` after successful implementation
 - maintain a compact change record when appropriate
 
 The Skill is intentionally lightweight.
 
-It avoids generating unnecessary readiness reports, large implementation documents, or excessive process artifacts.
+It avoids the unnecessary creation of separate readiness, impact-analysis, acceptance-criteria, and implementation-plan documents by default.
 
-The objective is to provide enough structure to make the change safe and understandable without slowing down development.
+---
+
+## Solution Knowledge Skill
+
+Location:
+
+```text
+.bob/skills/solution-knowledge/SKILL.md
+```
+
+The `solution-knowledge` Skill maintains the living technical knowledge of the application.
+
+Its primary artifact is:
+
+```text
+docs/solution-guide/SOLUTION_GUIDE.md
+```
+
+The Skill can:
+
+- create the Solution Guide when it does not exist
+- validate the guide against the current repository
+- update the guide after a validated application change
+- provide onboarding context to a new developer
+- recalculate repository-derived statistics
+- explain architecture, critical areas, and operational flows
+- maintain recent solution evolution
+- update knowledge validation metadata
+
+When the guide does not exist, `solution-knowledge` becomes the first technical activity before detailed ticket analysis.
+
+After a change is implemented and validated, the Skill updates only the sections that were actually affected.
+
+This prevents documentation drift without rewriting the complete document after every ticket.
 
 ---
 
 ## Change Brief
 
-Before implementation, Bob generates a compact Change Brief using the following structure:
+Before implementation, Bob generates a compact Change Brief:
 
 ```text
 Change Brief
@@ -233,9 +353,7 @@ Suggested Approach
 A small number of implementation steps.
 ```
 
-After presenting the brief, Bob asks the developer what to do next.
-
-Typical options include:
+Bob then asks:
 
 ```text
 1. Clarify or discuss the change
@@ -244,7 +362,7 @@ Typical options include:
 4. Stop
 ```
 
-This keeps the workflow interactive instead of forcing a fixed software process on the developer.
+This keeps the workflow interactive instead of forcing a rigid development process.
 
 ---
 
@@ -264,23 +382,13 @@ The IBM Bob project-level MCP configuration is located at:
 
 The MCP server uses **STDIO transport** and communicates with the local TaskFlow REST API.
 
-It provides IBM Bob with controlled access to TaskFlow without requiring Bob to understand the internal database implementation.
+It provides IBM Bob with controlled access to TaskFlow without requiring Bob to interact directly with the SQLite implementation.
 
 ### Available MCP Tools
 
 #### `list_open_tickets`
 
-Retrieves all TaskFlow tickets currently in `OPEN` status.
-
-Example information returned:
-
-```text
-Reference
-Title
-Status
-Owner
-Created date
-```
+Retrieves TaskFlow tickets currently in `OPEN` status.
 
 #### `get_ticket`
 
@@ -298,19 +406,13 @@ or:
 TF-0010
 ```
 
-It returns ticket details such as reference, title, description, status, category, owner, creator, and timestamps.
-
 #### `get_ticket_comments`
 
-Retrieves the discussion and business clarifications associated with a TaskFlow ticket.
-
-Comments are important because later business clarifications can change how a request should be interpreted.
+Retrieves discussion and business clarifications associated with a ticket.
 
 #### `start_work_on_ticket`
 
-Synchronizes the start of active development work with TaskFlow.
-
-The operation:
+Synchronizes the beginning of active development work with TaskFlow.
 
 ```text
 Owner   → IBM Bob
@@ -318,24 +420,22 @@ Status  → IN_PROGRESS
 Comment → IBM Bob started working on this request through BOB IN SYNC.
 ```
 
-The tool is designed to be idempotent.
+The operation is designed to be idempotent.
 
-If the ticket is already assigned to IBM Bob and already marked `IN_PROGRESS`, the MCP server avoids unnecessary duplicate updates and duplicate start-work comments.
+If the ticket is already assigned to IBM Bob and already marked `IN_PROGRESS`, the MCP server avoids duplicate work-start updates and comments.
 
 ---
 
 ## MCP Authentication
 
-The MCP server authenticates against the TaskFlow REST API.
-
-For the BOB IN SYNC workflow, the dedicated local IBM Bob user is used:
+The MCP server authenticates against the TaskFlow REST API using the dedicated local IBM Bob user:
 
 ```text
 Email: ibm.bob@taskflow.local
 Password: taskflow123
 ```
 
-This makes actions performed through MCP visible and traceable as IBM Bob activity inside TaskFlow.
+This makes MCP actions visible and traceable as IBM Bob activity inside TaskFlow.
 
 Local MCP configuration is stored in:
 
@@ -351,7 +451,7 @@ TASKFLOW_EMAIL=ibm.bob@taskflow.local
 TASKFLOW_PASSWORD=taskflow123
 ```
 
-The `.env` file should not be committed to the repository.
+The `.env` file should not be committed.
 
 Use `.env.example` as the template.
 
@@ -380,6 +480,7 @@ Use `.env.example` as the template.
 - IBM Bob
 - Bob Skills
 - Model Context Protocol (MCP)
+- living solution knowledge
 - code understanding
 - focused agent/subagent investigation
 - human-in-the-loop approval
@@ -508,13 +609,7 @@ OTHER
 
 ## Configure the TaskFlow MCP Server
 
-The MCP implementation is located at:
-
-```text
-mcp/taskflow-mcp/
-```
-
-Install its dependencies:
+Install MCP dependencies:
 
 ```bash
 cd mcp/taskflow-mcp
@@ -535,7 +630,7 @@ TASKFLOW_EMAIL=ibm.bob@taskflow.local
 TASKFLOW_PASSWORD=taskflow123
 ```
 
-Return to the repository root after installation:
+Return to the repository root:
 
 ```bash
 cd ../..
@@ -549,17 +644,51 @@ IBM Bob loads the project MCP configuration from:
 
 ---
 
+## Initialize the Solution Guide
+
+The repository includes the `solution-knowledge` Skill and a bootstrap Solution Guide.
+
+After installing or cloning the project, ask IBM Bob to validate it against the current repository:
+
+```text
+Validate and initialize the TaskFlow Solution Guide using the current repository.
+
+Calculate all repository-derived statistics, validate the architecture,
+operational flows, critical areas, data model, APIs, MCP integration,
+Bob Skills, testing guidance, onboarding guidance, and change impact guidance.
+
+Correct any bootstrap information in docs/solution-guide/SOLUTION_GUIDE.md
+that does not match the current implementation.
+
+Update Knowledge Metadata with the current validation date and repository commit
+when available.
+
+Do not modify application code.
+```
+
+The expected result is:
+
+- architecture validated against the repository
+- repository statistics calculated
+- critical areas confirmed
+- onboarding guidance refreshed
+- knowledge metadata updated
+- bootstrap placeholders removed
+- future ticket workflows able to use the guide as their starting context
+
+---
+
 ## Commands
 
 | Command | Purpose |
 | --- | --- |
-| `npm install` | Install TaskFlow application dependencies |
+| `npm install` | Install TaskFlow dependencies |
 | `npm run setup` | Create and seed the SQLite database if it is empty |
 | `npm run dev` | Start the React client and Express API together |
 | `npm test` | Run backend API tests |
 | `npm run build` | Build the production frontend |
 | `NODE_ENV=production npm start` | Serve the API and an existing frontend build on port 3001 |
-| `node --check mcp/taskflow-mcp/index.js` | Validate the MCP server JavaScript syntax |
+| `node --check mcp/taskflow-mcp/index.js` | Validate MCP server JavaScript syntax |
 
 ---
 
@@ -567,7 +696,7 @@ IBM Bob loads the project MCP configuration from:
 
 TaskFlow intentionally keeps configuration simple.
 
-Available application environment variables include:
+Application environment variables include:
 
 ```text
 API_PORT
@@ -587,13 +716,13 @@ TASKFLOW_PASSWORD
 
 ## Project Structure
 
-The final BOB IN SYNC project is organized around one primary workflow and one TaskFlow integration.
-
 ```text
 taskflow/
 ├── .bob/
 │   ├── skills/
-│   │   └── change-workflow/
+│   │   ├── change-workflow/
+│   │   │   └── SKILL.md
+│   │   └── solution-knowledge/
 │   │       └── SKILL.md
 │   └── mcp.json
 │
@@ -605,13 +734,14 @@ taskflow/
 │       └── README.md
 │
 ├── docs/
+│   ├── solution-guide/
+│   │   └── SOLUTION_GUIDE.md
+│   ├── change-log/
 │   ├── overview.md
 │   ├── api.md
-│   ├── developer-onboarding.md
-│   └── change-log/
+│   └── developer-onboarding.md
 │
 ├── bob_sessions/
-│
 ├── server/
 ├── src/
 ├── data/
@@ -624,12 +754,100 @@ taskflow/
 
 ## Documentation
 
-Additional documentation is available in:
+### Primary Living Knowledge
 
-- [`docs/overview.md`](docs/overview.md) — application architecture and structure
+[`docs/solution-guide/SOLUTION_GUIDE.md`](docs/solution-guide/SOLUTION_GUIDE.md)
+
+The preferred first technical reference for onboarding and ticket analysis.
+
+It includes architecture, operational flows, core components, critical areas, repository statistics, testing guidance, onboarding, risks, and change impact guidance.
+
+### Additional Documentation
+
+- [`docs/overview.md`](docs/overview.md) — application structure and supporting architecture information
 - [`docs/api.md`](docs/api.md) — TaskFlow REST API reference
-- [`docs/developer-onboarding.md`](docs/developer-onboarding.md) — developer onboarding information
-- [`docs/change-log/`](docs/change-log/) — compact change records created during maintenance work
+- [`docs/developer-onboarding.md`](docs/developer-onboarding.md) — supporting developer onboarding information
+- [`docs/change-log/`](docs/change-log/) — compact records of implemented changes
+
+---
+
+## Onboarding a New Squad Member
+
+A recommended reading order is:
+
+```text
+README.md
+   ↓
+docs/solution-guide/SOLUTION_GUIDE.md
+   ↓
+docs/overview.md
+   ↓
+docs/api.md
+   ↓
+change-workflow Skill
+   ↓
+relevant source code and tests
+```
+
+The Solution Guide should help a new developer quickly understand:
+
+- what TaskFlow does
+- how the architecture is organized
+- what is core
+- what is critical
+- which areas have higher change risk
+- how data flows through the system
+- how TaskFlow integrates with IBM Bob
+- how changes should be approached
+- which validation is expected
+
+A developer can also ask IBM Bob to use the `solution-knowledge` Skill for a focused onboarding explanation.
+
+---
+
+## Continuous Knowledge Synchronization
+
+After successful implementation and validation, `change-workflow` invokes `solution-knowledge`.
+
+The Skill evaluates whether the change affects:
+
+```text
+architecture
+operational flows
+core components
+critical areas
+data model
+APIs
+MCP integration
+repository statistics
+testing guidance
+onboarding guidance
+change impact guidance
+known risks
+recent solution evolution
+```
+
+Only affected sections are updated.
+
+Example:
+
+```text
+Application Change
+      ↓
+Tests / Build PASS
+      ↓
+solution-knowledge
+      ↓
+Affected Solution Guide sections updated
+      ↓
+Statistics recalculated when necessary
+      ↓
+Knowledge Metadata refreshed
+```
+
+This creates the central BOB IN SYNC idea:
+
+> **Every change makes the application and its knowledge evolve together.**
 
 ---
 
@@ -646,6 +864,7 @@ This area can contain:
 - IBM Bob Task Summary screenshots
 - MCP execution evidence
 - Change Brief evidence
+- Solution Guide creation or synchronization evidence
 - human approval checkpoints
 - implementation and validation evidence
 - final demo screenshots
@@ -657,23 +876,25 @@ bob_sessions/final-demo/
 ├── 01_taskflow_request.png
 ├── 02_bob_starts_work.png
 ├── 03_taskflow_in_progress.png
-├── 04_change_brief.png
-├── 05_human_approval.png
-├── 06_implementation_validation.png
-└── 07_application_result.png
+├── 04_solution_guide_context.png
+├── 05_change_brief.png
+├── 06_human_approval.png
+├── 07_implementation_validation.png
+├── 08_solution_guide_updated.png
+└── 09_application_result.png
 ```
 
 ---
 
 ## Example BOB IN SYNC Flow
 
-A typical interaction can begin with:
+A typical interaction begins with:
 
 ```text
 I get TF-0010.
 ```
 
-IBM Bob then follows a flow similar to:
+IBM Bob then follows:
 
 ```text
 Retrieve TF-0010
@@ -686,7 +907,11 @@ Comment added
       ↓
 Retrieve business context
       ↓
-Inspect relevant application areas
+Load Solution Guide
+      ↓
+Validate relevant knowledge against current code
+      ↓
+Inspect affected application areas
       ↓
 Generate Change Brief
       ↓
@@ -698,10 +923,12 @@ Implement change
       ↓
 Run tests / build
       ↓
-Synchronize affected documentation
+Update Solution Guide
+      ↓
+Maintain compact change record
 ```
 
-This demonstrates that the workflow connects business intent, system-of-record visibility, code understanding, implementation, and governance.
+This connects business intent, system-of-record visibility, living application knowledge, code understanding, implementation, validation, and governance.
 
 ---
 
@@ -715,21 +942,29 @@ Bob can understand, investigate, and propose changes, but implementation require
 
 The moment active work begins, TaskFlow reflects that activity.
 
+### Living Knowledge Before Rediscovery
+
+Future developers and future Bob sessions begin with a maintained Solution Guide instead of repeatedly rediscovering the application.
+
 ### Business Intent Comes from the Request
 
 Bob uses the ticket and its clarifications as the source for expected business behavior.
 
 ### Technical Truth Comes from the Application
 
-Bob inspects the current code, tests, schema, APIs, and documentation instead of relying on assumptions.
+The current code, tests, schema, configuration, and runtime behavior remain authoritative.
+
+### Knowledge Evolves with Code
+
+After validated changes, affected Solution Guide sections are automatically synchronized.
 
 ### Minimal Process
 
-The workflow favors concise summaries and direct interaction instead of generating large amounts of process documentation.
+The workflow favors concise summaries and useful living knowledge instead of large volumes of process documentation.
 
 ### Validation Before Claims
 
-Bob should not claim that an implementation succeeded unless the project's validation commands actually succeed.
+Bob does not claim an implementation succeeded unless the required validation actually succeeds.
 
 ### Delivery Governance Remains Intact
 
@@ -741,31 +976,35 @@ QA, homologation, and production promotion remain outside the automatic Bob work
 
 ## What BOB IN SYNC Demonstrates
 
-The project demonstrates how IBM Bob can move beyond isolated code generation and participate in a realistic enterprise software maintenance process.
-
-BOB IN SYNC shows IBM Bob working across:
+BOB IN SYNC demonstrates how IBM Bob can move beyond isolated code generation and participate in a realistic enterprise software maintenance lifecycle.
 
 ```text
-Request understanding
+Request Understanding
         +
-TaskFlow integration
+TaskFlow Integration
         +
 MCP
         +
-Bob Skills
+Change Workflow Skill
         +
-Code understanding
+Solution Knowledge Skill
         +
-Human approval
+Living Solution Guide
+        +
+Code Understanding
+        +
+Human Approval
         +
 Implementation
         +
 Testing
         +
-Documentation
+Knowledge Synchronization
 ```
 
-The result is a workflow where code, application knowledge, business requests, and developers stay synchronized.
+The result is a workflow where the business request, system of record, code, technical knowledge, and developers remain synchronized.
+
+A new squad member no longer needs to start from zero, and a new change no longer depends only on undocumented knowledge from previous developers.
 
 ---
 
