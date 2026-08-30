@@ -52,6 +52,7 @@ test('creates, edits, assigns, and retrieves a ticket', async () => {
     title: 'Application menu not loading',
     description: 'The administration menu remains blank after sign-in.',
     status: 'OPEN',
+    category: 'SOFTWARE',
     owner_id: null,
   });
   assert.equal(created.status, 201);
@@ -62,6 +63,7 @@ test('creates, edits, assigns, and retrieves a ticket', async () => {
     title: 'Application menu not loading',
     description: 'The administration menu remains blank after sign-in.',
     status: 'IN_PROGRESS',
+    category: 'SOFTWARE',
     owner_id: 2,
   });
   assert.equal(updated.status, 200);
@@ -84,11 +86,26 @@ test('adds a comment to a ticket', async () => {
 test('returns dashboard counts and users', async () => {
   const dashboard = await authenticated('get', '/api/dashboard');
   assert.equal(dashboard.status, 200);
-  assert.equal(Object.values(dashboard.body.counts).reduce((sum, value) => sum + value, 0), 13);
+  const { stale, ...statusCounts } = dashboard.body.counts;
+  assert.equal(Object.values(statusCounts).reduce((sum, value) => sum + value, 0), 13);
+  assert.equal(typeof stale, 'number');
+  assert.ok(stale >= 0);
 
   const users = await authenticated('get', '/api/users');
   assert.equal(users.body.users.length, 5);
   assert.equal(users.body.users.some((user) => 'password_hash' in user), false);
+});
+
+test('tickets list includes is_stale field', async () => {
+  const all = await authenticated('get', '/api/tickets');
+  assert.equal(all.status, 200);
+  assert.ok(all.body.tickets.every((t) => 'is_stale' in t));
+
+  const staleTickets = all.body.tickets.filter((t) => t.is_stale === 1);
+  assert.ok(staleTickets.length > 0);
+  staleTickets.forEach((t) => {
+    assert.ok(t.status === 'OPEN' || t.status === 'IN_PROGRESS');
+  });
 });
 
 test('validates invalid ticket status', async () => {

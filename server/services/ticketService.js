@@ -1,9 +1,11 @@
 export const STATUSES = ['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'];
+export const CATEGORIES = ['SOFTWARE', 'HARDWARE', 'ACCESS', 'OTHER'];
 
 function validateFields(data, userModel) {
   if (!data.title?.trim()) throw Object.assign(new Error('Title is required.'), { status: 400 });
   if (!data.description?.trim()) throw Object.assign(new Error('Description is required.'), { status: 400 });
   if (!STATUSES.includes(data.status)) throw Object.assign(new Error('A valid status is required.'), { status: 400 });
+  if (!CATEGORIES.includes(data.category)) throw Object.assign(new Error('A valid category is required.'), { status: 400 });
   if (data.ownerId !== null && data.ownerId !== undefined && !userModel.findById(data.ownerId)) {
     throw Object.assign(new Error('Selected owner was not found.'), { status: 400 });
   }
@@ -15,6 +17,9 @@ export function createTicketService(ticketModel, commentModel, userModel) {
       if (filters.status && !STATUSES.includes(filters.status)) {
         throw Object.assign(new Error('Invalid status filter.'), { status: 400 });
       }
+      if (filters.category && !CATEGORIES.includes(filters.category)) {
+        throw Object.assign(new Error('Invalid category filter.'), { status: 400 });
+      }
       return ticketModel.list(filters);
     },
     get(id) {
@@ -25,7 +30,8 @@ export function createTicketService(ticketModel, commentModel, userModel) {
     create(data, userId) {
       const values = {
         title: data.title?.trim(), description: data.description?.trim(),
-        status: data.status || 'OPEN', ownerId: data.owner_id ?? null,
+        status: data.status || 'OPEN', category: data.category || 'OTHER',
+        ownerId: data.owner_id ?? null,
       };
       validateFields(values, userModel);
       return ticketModel.create({ ...values, createdById: userId });
@@ -35,7 +41,8 @@ export function createTicketService(ticketModel, commentModel, userModel) {
       if (!current) throw Object.assign(new Error('Ticket not found.'), { status: 404 });
       const values = {
         title: data.title?.trim(), description: data.description?.trim(),
-        status: data.status, ownerId: data.owner_id ?? null,
+        status: data.status, category: data.category || current.category,
+        ownerId: data.owner_id ?? null,
       };
       validateFields(values, userModel);
       return ticketModel.update(id, values);
@@ -47,7 +54,10 @@ export function createTicketService(ticketModel, commentModel, userModel) {
     },
     counts() {
       const counts = ticketModel.statusCounts();
-      return Object.fromEntries(STATUSES.map((status) => [status, counts[status] || 0]));
+      return {
+        ...Object.fromEntries(STATUSES.map((status) => [status, counts[status] || 0])),
+        stale: ticketModel.countStale(),
+      };
     },
   };
 }

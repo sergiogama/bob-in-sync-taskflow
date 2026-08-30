@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api.js';
 import { ErrorState, LoadingState } from '../components/PageState.jsx';
 
-const emptyForm = { title: '', description: '', status: 'OPEN', owner_id: '' };
+const emptyForm = { title: '', description: '', status: 'OPEN', category: 'OTHER', owner_id: '' };
 
 export default function TicketFormPage() {
   const { id } = useParams();
@@ -19,7 +19,7 @@ export default function TicketFormPage() {
     const requests = [api('/users')]; if (editing) requests.push(api(`/tickets/${id}`));
     Promise.all(requests).then(([userData, ticketData]) => {
       setUsers(userData.users);
-      if (ticketData) setForm({ title: ticketData.ticket.title, description: ticketData.ticket.description, status: ticketData.ticket.status, owner_id: ticketData.ticket.owner_id || '' });
+      if (ticketData) setForm({ title: ticketData.ticket.title, description: ticketData.ticket.description, status: ticketData.ticket.status, category: ticketData.ticket.category || 'OTHER', owner_id: ticketData.ticket.owner_id || '' });
     }).catch((e) => setError(e.message)).finally(() => setLoading(false));
   }, [editing, id]);
 
@@ -41,6 +41,7 @@ export default function TicketFormPage() {
         <div className="form-grid">
           <label className="field-wide">Title<span className="required">Required</span><input name="title" value={form.title} onChange={change} maxLength="160" required autoFocus /></label>
           <label>Status<select name="status" value={form.status} onChange={change}><option value="OPEN">Open</option><option value="IN_PROGRESS">In Progress</option><option value="RESOLVED">Resolved</option><option value="CLOSED">Closed</option></select></label>
+          <label>Category<select name="category" value={form.category} onChange={change}><option value="SOFTWARE">Software</option><option value="HARDWARE">Hardware</option><option value="ACCESS">Access</option><option value="OTHER">Other</option></select></label>
           <label>Owner<select name="owner_id" value={form.owner_id} onChange={change}><option value="">Unassigned</option>{users.map((user) => <option value={user.id} key={user.id}>{user.name} — {user.role}</option>)}</select></label>
           <label className="field-wide">Description<span className="required">Required</span><textarea name="description" value={form.description} onChange={change} rows="9" required /></label>
         </div>
