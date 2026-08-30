@@ -92,7 +92,7 @@ test('returns dashboard counts and users', async () => {
   assert.ok(stale >= 0);
 
   const users = await authenticated('get', '/api/users');
-  assert.equal(users.body.users.length, 5);
+  assert.equal(users.body.users.length, 6);
   assert.equal(users.body.users.some((user) => 'password_hash' in user), false);
 });
 
