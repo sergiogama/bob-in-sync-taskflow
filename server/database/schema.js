@@ -17,6 +17,8 @@ export const schema = `
     description TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'OPEN'
       CHECK (status IN ('OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED')),
+    category TEXT NOT NULL DEFAULT 'OTHER'
+      CHECK (category IN ('SOFTWARE', 'HARDWARE', 'ACCESS', 'OTHER')),
     owner_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
     created_by_id INTEGER NOT NULL REFERENCES users(id),
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,

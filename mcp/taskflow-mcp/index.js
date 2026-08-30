@@ -1,17 +1,18 @@
 #!/usr/bin/env node
 /**
- * TaskFlow MCP Server — read-only
+ * TaskFlow MCP Server
  *
  * Exposes three MCP tools for IBM Bob:
  *   - list_open_tickets
  *   - get_ticket
  *   - get_ticket_comments
+ *   - start_work_on_ticket
  *
  * Authentication: POST /api/auth/login (Bearer token cached in memory).
  * Transport: STDIO.
  *
  * Environment variables:
- *   TASKFLOW_API_URL  — defaults to http://127.0.0.1:3101
+ *   TASKFLOW_API_URL  — defaults to http://127.0.0.1:3001
  *   TASKFLOW_EMAIL    — required
  *   TASKFLOW_PASSWORD — required
  */
@@ -22,7 +23,7 @@ import { z } from 'zod'
 
 // ── Configuration ────────────────────────────────────────────────────────────
 
-const BASE_URL = (process.env.TASKFLOW_API_URL || 'http://127.0.0.1:3101').replace(/\/$/, '')
+const BASE_URL = (process.env.TASKFLOW_API_URL || 'http://127.0.0.1:3001').replace(/\/$/, '')
 const EMAIL = process.env.TASKFLOW_EMAIL
 const PASSWORD = process.env.TASKFLOW_PASSWORD
 
@@ -59,29 +60,41 @@ async function getToken() {
 
 // ── Authenticated fetch with one 401 retry ───────────────────────────────────
 
-async function apiFetch(path) {
-  const token = await getToken()
-  const res = await fetch(`${BASE_URL}${path}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  })
-  if (res.status === 401) {
-    // Token expired or invalidated — re-authenticate once and retry
-    cachedToken = null
-    const newToken = await authenticate()
-    const retry = await fetch(`${BASE_URL}${path}`, {
-      headers: { Authorization: `Bearer ${newToken}` },
-    })
-    if (!retry.ok) {
-      const body = await retry.text()
-      throw new Error(`TaskFlow API error (${retry.status}): ${body}`)
+async function apiFetch(path, { method = 'GET', body } = {}) {
+  async function request(token) {
+    const headers = {
+      Authorization: `Bearer ${token}`,
     }
-    return retry.json()
+
+    const options = {
+      method,
+      headers,
+    }
+
+    if (body !== undefined) {
+      headers['Content-Type'] = 'application/json'
+      options.body = JSON.stringify(body)
+    }
+
+    return fetch(`${BASE_URL}${path}`, options)
   }
+
+  let token = await getToken()
+  let res = await request(token)
+
+  if (res.status === 401) {
+    cachedToken = null
+    token = await authenticate()
+    res = await request(token)
+  }
+
   if (!res.ok) {
-    const body = await res.text()
-    throw new Error(`TaskFlow API error (${res.status}): ${body}`)
+    const responseBody = await res.text()
+    throw new Error(`TaskFlow API error (${res.status}): ${responseBody}`)
   }
-  return res.json()
+
+  const text = await res.text()
+  return text ? JSON.parse(text) : null
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -191,6 +204,125 @@ server.tool(
           type: 'text',
           text: JSON.stringify(
             { ticket_id: id, reference: ticketRef(id), comments, count: comments.length },
+            null,
+            2
+          ),
+        },
+      ],
+    }
+  }
+)
+
+// ── Tool: start_work_on_ticket ────────────────────────────────────────────────
+
+const START_WORK_COMMENT =
+  'IBM Bob started working on this request through BOB IN SYNC.'
+
+server.tool(
+  'start_work_on_ticket',
+  'Mark that IBM Bob has started actively working on a TaskFlow ticket. ' +
+    'Assigns the ticket to IBM Bob, changes its status to IN_PROGRESS, ' +
+    'and adds a start-work comment. This operation is idempotent.',
+  {
+    ticket_id: z
+      .string()
+      .describe('Ticket id — numeric (14) or reference format (TF-0014)'),
+  },
+  async ({ ticket_id }) => {
+    const id = parseTicketId(ticket_id)
+
+    // Retrieve the current ticket and TaskFlow users.
+    const [ticketData, usersData] = await Promise.all([
+      apiFetch(`/api/tickets/${id}`),
+      apiFetch('/api/users'),
+    ])
+
+    const ticket = ticketData.ticket
+    const users = usersData.users || []
+
+    // Locate IBM Bob without relying on a hard-coded database id.
+    const bob =
+      users.find(
+        (u) =>
+          String(u.email || '').trim().toLowerCase() ===
+          'ibm.bob@taskflow.local'
+      ) ||
+      users.find(
+        (u) =>
+          String(u.name || '').trim().toLowerCase() === 'ibm bob'
+      )
+
+    if (!bob) {
+      throw new Error(
+        'IBM Bob user was not found in TaskFlow. ' +
+          'Expected name "IBM Bob" or email "ibm.bob@taskflow.local".'
+      )
+    }
+
+    // Detect whether ownership/status already reflect active Bob work.
+    const ownerAlreadyBob =
+      ticket.owner_id === bob.id ||
+      ticket.owner?.id === bob.id ||
+      String(ticket.owner?.name || '').trim().toLowerCase() === 'ibm bob' ||
+      String(ticket.owner || '').trim().toLowerCase() === 'ibm bob'
+
+    const statusAlreadyInProgress = ticket.status === 'IN_PROGRESS'
+
+    let ticketUpdated = false
+    let updatedTicket = ticket
+
+    if (!ownerAlreadyBob || !statusAlreadyInProgress) {
+      const updateData = await apiFetch(`/api/tickets/${id}`, {
+        method: 'PUT',
+        body: {
+          title: ticket.title,
+          description: ticket.description,
+          status: 'IN_PROGRESS',
+          category: ticket.category,
+          owner_id: bob.id,
+        },
+      })
+
+      updatedTicket = updateData.ticket
+      ticketUpdated = true
+    }
+
+    // GET /api/tickets/:id already includes comments.
+    const comments = ticket.comments || []
+
+    const commentAlreadyExists = comments.some(
+      (comment) =>
+        String(comment.content || '').trim() === START_WORK_COMMENT
+    )
+
+    let commentAdded = false
+
+    if (!commentAlreadyExists) {
+      await apiFetch(`/api/tickets/${id}/comments`, {
+        method: 'POST',
+        body: {
+          content: START_WORK_COMMENT,
+        },
+      })
+
+      commentAdded = true
+    }
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(
+            {
+              reference: ticketRef(id),
+              started: true,
+              owner: 'IBM Bob',
+              status: 'IN_PROGRESS',
+              ticket_updated: ticketUpdated,
+              comment_added: commentAdded,
+              message:
+                'IBM Bob is now working on this request through BOB IN SYNC.',
+            },
             null,
             2
           ),

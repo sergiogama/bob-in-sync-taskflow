@@ -5,7 +5,11 @@
       "args": [
         "--env-file=${workspaceFolder}/mcp/taskflow-mcp/.env",
         "${workspaceFolder}/mcp/taskflow-mcp/index.js"
-      ]
+      ],
+      "env": {
+        "TASKFLOW_API_URL": "http://127.0.0.1:3001"
+      },
+      "disabled": false
     }
   }
 }
