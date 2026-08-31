@@ -424,6 +424,8 @@ The operation is designed to be idempotent.
 
 If the ticket is already assigned to IBM Bob and already marked `IN_PROGRESS`, the MCP server avoids duplicate work-start updates and comments.
 
+As IBM Bob has the Developer role, it can claim unassigned tickets and continue tickets already assigned to IBM Bob. It refuses to take work currently assigned to another user.
+
 ---
 
 ## MCP Authentication
@@ -579,12 +581,16 @@ npm run setup
 
 again is safe and does not replace an existing populated database.
 
+Pending forward-only migrations from `server/database/migrations/` are applied automatically by both setup and server startup. Applied versions are recorded in `schema_migrations`; add a new numbered SQL file for every future schema change.
+
 The application currently stores:
 
 ```text
 users
 tickets
 comments
+password_reset_tokens
+schema_migrations
 ```
 
 Ticket status values are:
@@ -683,7 +689,7 @@ The expected result is:
 | Command | Purpose |
 | --- | --- |
 | `npm install` | Install TaskFlow dependencies |
-| `npm run setup` | Create and seed the SQLite database if it is empty |
+| `npm run setup` | Apply database migrations and seed the database if it is empty |
 | `npm run dev` | Start the React client and Express API together |
 | `npm test` | Run backend API tests |
 | `npm run build` | Build the production frontend |

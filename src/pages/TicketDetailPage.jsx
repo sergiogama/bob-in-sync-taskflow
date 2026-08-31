@@ -4,8 +4,11 @@ import { api } from '../api.js';
 import StatusBadge from '../components/StatusBadge.jsx';
 import { ErrorState, LoadingState } from '../components/PageState.jsx';
 import { formatDate } from './DashboardPage.jsx';
+import { useAuth } from '../context/AuthContext.jsx';
+import { canEditTicket } from '../permissions.js';
 
 export default function TicketDetailPage() {
+  const { user } = useAuth();
   const { id } = useParams();
   const [ticket, setTicket] = useState(null);
   const [comment, setComment] = useState('');
@@ -25,7 +28,7 @@ export default function TicketDetailPage() {
   if (!ticket) return <LoadingState />;
   return (
     <>
-      <div className="page-header detail-header"><div><div className="breadcrumbs"><Link to="/tickets">Tickets</Link><span>/</span><span>TF-{String(ticket.id).padStart(4, '0')}</span></div><div className="title-with-status"><h1>{ticket.title}</h1><StatusBadge status={ticket.status} />{ticket.is_stale ? <span className="stale-badge">Stale</span> : null}</div><p>Created by {ticket.created_by} on {formatDate(ticket.created_at)}</p></div><Link className="button secondary" to={`/tickets/${ticket.id}/edit`}>Edit ticket</Link></div>
+      <div className="page-header detail-header"><div><div className="breadcrumbs"><Link to="/tickets">Tickets</Link><span>/</span><span>TF-{String(ticket.id).padStart(4, '0')}</span></div><div className="title-with-status"><h1>{ticket.title}</h1><StatusBadge status={ticket.status} />{ticket.is_stale ? <span className="stale-badge">Stale</span> : null}</div><p>Created by {ticket.created_by} on {formatDate(ticket.created_at)}</p></div>{canEditTicket(user, ticket) && <Link className="button secondary" to={`/tickets/${ticket.id}/edit`}>{user.role === 'Developer' && ticket.owner_id === null ? 'Claim ticket' : 'Edit ticket'}</Link>}</div>
       {error && <ErrorState message={error} />}
       <div className="detail-grid">
         <div className="detail-main">

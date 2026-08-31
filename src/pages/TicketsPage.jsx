@@ -4,8 +4,11 @@ import { api } from '../api.js';
 import StatusBadge from '../components/StatusBadge.jsx';
 import { ErrorState, LoadingState } from '../components/PageState.jsx';
 import { formatDate } from './DashboardPage.jsx';
+import { useAuth } from '../context/AuthContext.jsx';
+import { canCreateTicket } from '../permissions.js';
 
 export default function TicketsPage() {
+  const { user } = useAuth();
   const [params, setParams] = useSearchParams();
   const [tickets, setTickets] = useState(null);
   const [error, setError] = useState('');
@@ -22,7 +25,7 @@ export default function TicketsPage() {
   function updateParam(name, value) { const next = new URLSearchParams(params); value ? next.set(name, value) : next.delete(name); setParams(next); }
   return (
     <>
-      <div className="page-header"><div><h1>Tickets</h1><p>Search and manage maintenance requests</p></div><Link className="button primary" to="/tickets/new">New ticket</Link></div>
+      <div className="page-header"><div><h1>Tickets</h1><p>Search and manage maintenance requests</p></div>{canCreateTicket(user) && <Link className="button primary" to="/tickets/new">New ticket</Link>}</div>
       <section className="panel">
         <div className="filters">
           <label className="search-field"><span>Search</span><input type="search" placeholder="Search title, description, or owner" value={search} onChange={(e) => updateParam('search', e.target.value)} /></label>

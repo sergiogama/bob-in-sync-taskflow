@@ -268,6 +268,19 @@ server.tool(
 
     const statusAlreadyInProgress = ticket.status === 'IN_PROGRESS'
 
+    if (ticket.status === 'CLOSED') {
+      throw new Error(
+        `TaskFlow ticket ${ticketRef(id)} is closed. Only a Manager can reopen a closed ticket.`
+      )
+    }
+
+    if (ticket.owner_id !== null && !ownerAlreadyBob) {
+      throw new Error(
+        `TaskFlow ticket ${ticketRef(id)} is already assigned to ${ticket.owner || 'another user'}. ` +
+          'IBM Bob can only start work on unassigned tickets or tickets already assigned to IBM Bob.'
+      )
+    }
+
     let ticketUpdated = false
     let updatedTicket = ticket
 

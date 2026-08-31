@@ -55,7 +55,8 @@ Canonical values (enforced by SQLite CHECK and service validation): `OPEN`, `IN_
 ## Database
 
 - SQLite via `better-sqlite3` (synchronous API — no `async/await` in models).
-- Schema applied on every startup via `db.exec(schema)` using `CREATE TABLE IF NOT EXISTS`.
+- Forward-only SQL migrations live in `server/database/migrations/` and are applied on startup by `migrationRunner.js`.
+- Applied versions are recorded in `schema_migrations`; never edit an applied migration. Add the next numbered file.
 - Ticket `updated_at` is bumped manually when a comment is added (see [`server/models/commentModel.js`](server/models/commentModel.js)).
 - SQLite dates are stored as `TEXT` in UTC; the frontend normalises them with `value.includes('T') ? value : \`${value.replace(' ', 'T')}Z\`` before passing to `Intl.DateTimeFormat`.
 

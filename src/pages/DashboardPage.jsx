@@ -3,10 +3,13 @@ import { Link } from 'react-router-dom';
 import { api } from '../api.js';
 import StatusBadge, { statusLabels } from '../components/StatusBadge.jsx';
 import { ErrorState, LoadingState } from '../components/PageState.jsx';
+import { useAuth } from '../context/AuthContext.jsx';
+import { canCreateTicket } from '../permissions.js';
 
 const statuses = ['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'];
 
 export default function DashboardPage() {
+  const { user } = useAuth();
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   useEffect(() => { Promise.all([api('/dashboard'), api('/tickets')]).then(([dashboard, tickets]) => setData({ counts: dashboard.counts, tickets: tickets.tickets.slice(0, 5) })).catch((e) => setError(e.message)); }, []);
@@ -14,7 +17,7 @@ export default function DashboardPage() {
   if (!data) return <LoadingState />;
   return (
     <>
-      <div className="page-header"><div><h1>Dashboard</h1><p>Maintenance request overview</p></div><Link className="button primary" to="/tickets/new">New ticket</Link></div>
+      <div className="page-header"><div><h1>Dashboard</h1><p>Maintenance request overview</p></div>{canCreateTicket(user) && <Link className="button primary" to="/tickets/new">New ticket</Link>}</div>
       <section className="metrics" aria-label="Ticket status summary">
         {statuses.map((status) => <Link to={`/tickets?status=${status}`} className={`metric metric-${status.toLowerCase()}`} key={status}><span>{statusLabels[status]}</span><strong>{data.counts[status]}</strong><small>View tickets</small></Link>)}
         <Link to="/tickets?status=OPEN" className="metric metric-stale"><span>Stale</span><strong>{data.counts.stale}</strong><small>View tickets</small></Link>

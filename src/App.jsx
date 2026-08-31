@@ -2,6 +2,8 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from './context/AuthContext.jsx';
 import Layout from './components/Layout.jsx';
 import LoginPage from './pages/LoginPage.jsx';
+import SignInHelpPage from './pages/SignInHelpPage.jsx';
+import AccountRecoveryPage from './pages/AccountRecoveryPage.jsx';
 import DashboardPage from './pages/DashboardPage.jsx';
 import TicketsPage from './pages/TicketsPage.jsx';
 import TicketFormPage from './pages/TicketFormPage.jsx';
@@ -11,7 +13,13 @@ import UsersPage from './pages/UsersPage.jsx';
 export default function App() {
   const { user, loading } = useAuth();
   if (loading) return <div className="loading-screen">Loading TaskFlow…</div>;
-  if (!user) return <Routes><Route path="*" element={<LoginPage />} /></Routes>;
+  if (!user) return (
+    <Routes>
+      <Route path="/forgot-password" element={<SignInHelpPage />} />
+      <Route path="/reset-password" element={<AccountRecoveryPage />} />
+      <Route path="*" element={<LoginPage />} />
+    </Routes>
+  );
 
   return (
     <Routes>
