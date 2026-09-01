@@ -21,6 +21,7 @@ export default function DashboardPage() {
       <section className="metrics" aria-label="Ticket status summary">
         {statuses.map((status) => <Link to={`/tickets?status=${status}`} className={`metric metric-${status.toLowerCase()}`} key={status}><span>{statusLabels[status]}</span><strong>{data.counts[status]}</strong><small>View tickets</small></Link>)}
         <Link to="/tickets?status=OPEN" className="metric metric-stale"><span>Stale</span><strong>{data.counts.stale}</strong><small>View tickets</small></Link>
+        <Link to="/tickets?readiness=NOT_READY" className="metric metric-not_ready"><span>Awaiting information</span><strong>{data.counts.readiness.NOT_READY}</strong><small>View tickets</small></Link>
       </section>
       <section className="panel">
         <div className="panel-header"><div><h2>Recently updated</h2><p>Latest maintenance request activity</p></div><Link to="/tickets" className="secondary-link">View all tickets</Link></div>

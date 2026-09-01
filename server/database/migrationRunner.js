@@ -53,10 +53,17 @@ function loadMigrations() {
 }
 
 function validateCurrentSchema(db) {
-  const requiredTables = ['users', 'tickets', 'comments', 'password_reset_tokens'];
+  const requiredTables = [
+    'users', 'tickets', 'comments', 'password_reset_tokens', 'readiness_reviews',
+    'audit_events', 'notification_outbox', 'workflow_settings',
+  ];
   const missingTables = requiredTables.filter((table) => !tableExists(db, table));
   if (missingTables.length) throw new Error(`Database schema is missing: ${missingTables.join(', ')}`);
   if (!columnExists(db, 'tickets', 'category')) throw new Error('Database schema is missing tickets.category');
+  if (!columnExists(db, 'tickets', 'readiness_status')) throw new Error('Database schema is missing tickets.readiness_status');
+  if (!columnExists(db, 'notification_outbox', 'provider_message_id')) {
+    throw new Error('Database schema is missing notification_outbox.provider_message_id');
+  }
 }
 
 export function runMigrations(db) {

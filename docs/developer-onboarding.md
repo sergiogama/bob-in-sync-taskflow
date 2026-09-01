@@ -318,6 +318,12 @@ Open [http://localhost:5173](http://localhost:5173). All five seed users share t
 | `API_PORT` | `3001` | API port (dev and prod; also used by the Vite proxy) |
 | `PORT` | `3001` | Production API port (checked after `API_PORT`) |
 | `DATABASE_PATH` | `data/taskflow.db` | Path to the SQLite file |
+| `NOTIFICATION_MODE` | `log` | Use `resend` for real email delivery |
+| `NOTIFICATION_POLL_MS` | `5000` | Outbox worker polling interval |
+| `NOTIFICATION_RECIPIENT_OVERRIDE` | — | Development-only redirect such as `delivered@resend.dev`; omit in production |
+| `RESEND_API_KEY` | — | Resend API key; required only in `resend` mode |
+| `RESEND_FROM` | `TaskFlow <onboarding@resend.dev>` | Verified sender required for production recipients |
+| `RESEND_REPLY_TO` | — | Optional internal support reply address |
 
 ### Running Tests
 

@@ -9,6 +9,7 @@ import TicketsPage from './pages/TicketsPage.jsx';
 import TicketFormPage from './pages/TicketFormPage.jsx';
 import TicketDetailPage from './pages/TicketDetailPage.jsx';
 import UsersPage from './pages/UsersPage.jsx';
+import WorkflowSettingsPage from './pages/WorkflowSettingsPage.jsx';
 
 export default function App() {
   const { user, loading } = useAuth();
@@ -31,6 +32,7 @@ export default function App() {
         <Route path="/tickets/:id" element={<TicketDetailPage />} />
         <Route path="/tickets/:id/edit" element={<TicketFormPage />} />
         <Route path="/users" element={<UsersPage />} />
+        <Route path="/settings/workflow" element={user.role === 'Manager' ? <WorkflowSettingsPage /> : <Navigate to="/dashboard" replace />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Route>
     </Routes>

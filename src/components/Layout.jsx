@@ -18,8 +18,9 @@ export default function Layout() {
             <NavLink to="/dashboard"><span className="nav-icon">▦</span>Dashboard</NavLink>
             <NavLink to="/tickets"><span className="nav-icon">▤</span>Tickets</NavLink>
             <NavLink to="/users"><span className="nav-icon">●</span>Users</NavLink>
+            {user.role === 'Manager' && <NavLink to="/settings/workflow"><span className="nav-icon">⚙</span>Workflow</NavLink>}
           </nav>
-          <div className="version">TaskFlow v1.0</div>
+          <div className="version">TaskFlow v1.1</div>
         </aside>
         <main className="content"><Outlet /></main>
       </div>

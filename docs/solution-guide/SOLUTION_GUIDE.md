@@ -84,6 +84,13 @@ IBM Bob (Claude)
 4. Manager validates and closes → `CLOSED`
 5. Role and ownership transitions are enforced by `ticketService`; SQLite `CHECK` constraints reject unknown values
 
+### Ticket Readiness
+1. New or functionally changed requests become `NEEDS_REVIEW`
+2. Analyst, Manager, or IBM Bob runs the deterministic criteria configured by a Manager
+3. Complete requests become `READY`; incomplete requests become `NOT_READY` and receive one concise comment listing missing information
+4. Developers can start or update work only when readiness is `READY`
+5. Reviews retain criteria version, reviewer, source, summary, and missing items
+
 ### Ticket Listing & Filtering
 1. `TicketsPage` reads `search`, `status`, `category` from URL search params
 2. Debounced (150ms) fetch to `GET /api/tickets?status=…&category=…&search=…`
@@ -99,9 +106,10 @@ IBM Bob (Claude)
 ### IBM Bob Start-Work (BOB IN SYNC)
 1. Developer tells Bob to work on a ticket
 2. Bob calls `start_work_on_ticket` via MCP
-3. MCP rejects a ticket already assigned to someone else; otherwise it calls `PUT /api/tickets/:id` to assign IBM Bob + set `IN_PROGRESS`
-4. MCP server calls `POST /api/tickets/:id/comments` to add traceability comment
-5. Ticket is now assigned to IBM Bob and visibly IN_PROGRESS in TaskFlow UI
+3. MCP runs readiness review when needed and stops with `NOT_READY` when information is missing
+4. MCP rejects a ticket already assigned to someone else; otherwise it calls `PUT /api/tickets/:id` to assign IBM Bob + set `IN_PROGRESS`
+5. MCP server calls `POST /api/tickets/:id/comments` to add traceability comment
+6. Ticket is now assigned to IBM Bob and visibly IN_PROGRESS in TaskFlow UI
 
 ### Adding a Comment
 1. Authenticated user posts `POST /api/tickets/:id/comments` with `{ content }`
@@ -119,11 +127,15 @@ IBM Bob (Claude)
 | `createTicketController` | HTTP request/response mapping for tickets | `server/controllers/ticketController.js` |
 | `createAuthService` | Login, session management, Manager-issued password resets, token hashing, and session revocation | `server/services/authService.js` |
 | `createAccountRecoveryModel` | Transactional SQL for replacing and consuming hashed reset tokens | `server/models/accountRecoveryModel.js` |
+| `createWorkflowService` | Readiness analysis and Manager workflow configuration | `server/services/workflowService.js` |
+| `createActivityService` | Transactional audit and notification-outbox orchestration | `server/services/activityService.js` |
+| `createNotificationWorker` | Preview or Resend API delivery with idempotency and retry tracking | `server/services/notificationWorker.js` |
 | `createApp` | Factory wiring all layers, route registration, error handler | `server/app.js` |
 | `TicketsPage` | Ticket list with search/status/category filters, stale indicator | `src/pages/TicketsPage.jsx` |
 | `DashboardPage` | Status metrics dashboard + recently updated tickets | `src/pages/DashboardPage.jsx` |
 | `TicketDetailPage` | Full ticket view with comments | `src/pages/TicketDetailPage.jsx` |
 | `TicketFormPage` | Create/edit ticket form | `src/pages/TicketFormPage.jsx` |
+| `WorkflowSettingsPage` | Manager configuration for readiness and notifications | `src/pages/WorkflowSettingsPage.jsx` |
 | `SignInHelpPage` | Secure sign-in assistance guidance directing users to a Manager | `src/pages/SignInHelpPage.jsx` |
 | `AccountRecoveryPage` | Form to submit reset token and new password | `src/pages/AccountRecoveryPage.jsx` |
 | `StatusBadge` | Reusable status pill — CSS class `status-${status.toLowerCase()}` | `src/components/StatusBadge.jsx` |
@@ -195,7 +207,10 @@ IBM Bob (Claude)
 | title | TEXT | Required |
 | description | TEXT | Required |
 | status | TEXT | CHECK: `OPEN`, `IN_PROGRESS`, `RESOLVED`, `CLOSED` |
+| readiness_status | TEXT | CHECK: `NEEDS_REVIEW`, `READY`, `NOT_READY` |
 | category | TEXT | CHECK: `SOFTWARE`, `HARDWARE`, `ACCESS`, `OTHER` |
+| expected_behavior, steps_to_reproduce, environment | TEXT | Structured request information used by readiness criteria |
+| business_rules, acceptance_criteria | TEXT | Optional or configurable request information |
 | owner_id | INTEGER FK | Nullable — NULL means unassigned |
 | created_by_id | INTEGER FK | NOT NULL |
 | created_at | TEXT | UTC |
@@ -222,6 +237,8 @@ IBM Bob (Claude)
 
 **Indexes:** `idx_tickets_status`, `idx_tickets_owner`, `idx_comments_ticket`, `idx_reset_tokens_token`
 
+Workflow persistence is separated into `readiness_reviews`, `audit_events`, `notification_outbox`, and the singleton `workflow_settings` table. Migration `002_ticket_workflow.sql` adds these structures and readiness fields without rewriting existing records. Migration `003_resend_notifications.sql` adds provider and provider-message tracking for Resend delivery.
+
 ---
 
 ## 7. APIs and Integrations
@@ -243,11 +260,18 @@ IBM Bob (Claude)
 | GET | `/api/tickets/:id` | Ticket detail with `comments[]` |
 | PUT | `/api/tickets/:id` | Full update subject to role and ownership policy — returns `{ ticket }` |
 | POST | `/api/tickets/:id/comments` | Add comment — returns `201 { comment }` |
+| POST | `/api/tickets/:id/readiness-review` | Deterministic readiness review for Analyst, Manager, or IBM Bob |
+
+### Workflow Administration
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/workflow/settings` | Manager-only readiness and notification configuration |
+| PUT | `/api/workflow/settings` | Manager-only configuration update with criteria version increment |
 
 ### Dashboard & Users
 | Method | Path | Description |
 |---|---|---|
-| GET | `/api/dashboard` | Returns `{ counts: { OPEN, IN_PROGRESS, RESOLVED, CLOSED, stale } }` |
+| GET | `/api/dashboard` | Returns lifecycle, stale, and readiness counts |
 | GET | `/api/users` | Returns `{ users: [...] }` — no `password_hash` |
 | POST | `/api/users/:id/password-reset` | Manager-only issuance of a one-time reset token |
 
@@ -258,6 +282,7 @@ Health, login, forgot-password guidance, and reset-password consumption are publ
 |---|---|
 | `list_open_tickets` | Returns all tickets with status OPEN |
 | `get_ticket` | Full details of a single ticket by id or reference |
+| `review_ticket_readiness` | Records READY or NOT_READY and missing information |
 | `get_ticket_comments` | All comments for a ticket |
 | `start_work_on_ticket` | Assigns to IBM Bob, sets IN_PROGRESS, adds traceability comment |
 

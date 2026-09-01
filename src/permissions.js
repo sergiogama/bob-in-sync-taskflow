@@ -9,7 +9,8 @@ export function canEditTicket(user, ticket) {
   if (user.role === 'Manager') return true;
   if (user.role === 'Analyst') return ['OPEN', 'IN_PROGRESS'].includes(ticket.status);
   if (user.role === 'Developer') {
-    return ticket.status !== 'CLOSED' && (ticket.owner_id === null || ticket.owner_id === user.id);
+    return ticket.readiness_status === 'READY' && ticket.status !== 'CLOSED' &&
+      (ticket.owner_id === null || ticket.owner_id === user.id);
   }
   return false;
 }

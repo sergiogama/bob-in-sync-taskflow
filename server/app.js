@@ -6,38 +6,62 @@ import { createUserModel } from './models/userModel.js';
 import { createTicketModel } from './models/ticketModel.js';
 import { createCommentModel } from './models/commentModel.js';
 import { createAccountRecoveryModel } from './models/accountRecoveryModel.js';
+import { createWorkflowModel } from './models/workflowModel.js';
+import { createAuditModel } from './models/auditModel.js';
+import { createNotificationModel } from './models/notificationModel.js';
 import { createAuthService } from './services/authService.js';
 import { createTicketService } from './services/ticketService.js';
+import { createActivityService } from './services/activityService.js';
+import { createWorkflowService } from './services/workflowService.js';
 import { requireAuth } from './middleware/auth.js';
 import { requireRole } from './middleware/authorization.js';
+import { requestContext } from './middleware/requestContext.js';
 import { createAuthController } from './controllers/authController.js';
 import { createTicketController } from './controllers/ticketController.js';
 import { createUserController } from './controllers/userController.js';
+import { createWorkflowController } from './controllers/workflowController.js';
 import { authRoutes } from './routes/authRoutes.js';
 import { ticketRoutes } from './routes/ticketRoutes.js';
 import { userRoutes } from './routes/userRoutes.js';
+import { workflowRoutes } from './routes/workflowRoutes.js';
 
 export function createApp(db, { serveClient = false } = {}) {
   const app = express();
   app.use(express.json({ limit: '1mb' }));
+  app.use(requestContext);
 
   const userModel = createUserModel(db);
   const ticketModel = createTicketModel(db);
   const commentModel = createCommentModel(db);
   const accountRecoveryModel = createAccountRecoveryModel(db);
+  const workflowModel = createWorkflowModel(db);
+  const auditModel = createAuditModel(db);
+  const notificationModel = createNotificationModel(db);
   const authService = createAuthService(userModel, accountRecoveryModel);
-  const ticketService = createTicketService(ticketModel, commentModel, userModel);
+  const activityService = createActivityService(db, auditModel, notificationModel, workflowModel, userModel);
+  const workflowService = createWorkflowService(ticketModel, commentModel, workflowModel, activityService);
+  const ticketService = createTicketService(
+    ticketModel, commentModel, userModel, workflowModel, auditModel,
+    notificationModel, activityService,
+  );
   const authMiddleware = requireAuth(authService);
+  const workflowController = createWorkflowController(workflowService);
+  app.locals.notificationModel = notificationModel;
 
   app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
   app.use('/api/auth', authRoutes(createAuthController(authService), authMiddleware));
   app.use('/api/tickets', authMiddleware, ticketRoutes(
     createTicketController(ticketService),
     requireRole('Analyst', 'Manager'),
+    workflowController.review,
   ));
   app.get('/api/dashboard', authMiddleware, (req, res) => res.json({ counts: ticketService.counts() }));
   app.use('/api/users', authMiddleware, userRoutes(
     createUserController(userModel, authService),
+    requireRole('Manager'),
+  ));
+  app.use('/api/workflow', authMiddleware, workflowRoutes(
+    workflowController,
     requireRole('Manager'),
   ));
 

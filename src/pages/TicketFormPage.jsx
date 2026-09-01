@@ -5,7 +5,7 @@ import { ErrorState, LoadingState } from '../components/PageState.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { allowedTicketStatuses, canCreateTicket, canEditTicket } from '../permissions.js';
 
-const emptyForm = { title: '', description: '', status: 'OPEN', category: 'OTHER', owner_id: '' };
+const emptyForm = { title: '', description: '', status: 'OPEN', category: 'OTHER', owner_id: '', expected_behavior: '', steps_to_reproduce: '', environment: '', business_rules: '', acceptance_criteria: '' };
 
 export default function TicketFormPage() {
   const { id } = useParams();
@@ -33,6 +33,11 @@ export default function TicketFormPage() {
           status: user.role === 'Developer' && loadedTicket.status === 'OPEN' ? 'IN_PROGRESS' : loadedTicket.status,
           category: loadedTicket.category || 'OTHER',
           owner_id: developerClaim ? String(user.id) : (loadedTicket.owner_id || ''),
+          expected_behavior: loadedTicket.expected_behavior || '',
+          steps_to_reproduce: loadedTicket.steps_to_reproduce || '',
+          environment: loadedTicket.environment || '',
+          business_rules: loadedTicket.business_rules || '',
+          acceptance_criteria: loadedTicket.acceptance_criteria || '',
         });
       }
     }).catch((e) => setError(e.message)).finally(() => setLoading(false));
@@ -68,6 +73,11 @@ export default function TicketFormPage() {
           <label>Category<select name="category" value={form.category} onChange={change} disabled={developerMode}><option value="SOFTWARE">Software</option><option value="HARDWARE">Hardware</option><option value="ACCESS">Access</option><option value="OTHER">Other</option></select></label>
           <label>Owner<select name="owner_id" value={form.owner_id} onChange={change} disabled={developerMode}><option value="">Unassigned</option>{users.map((listedUser) => <option value={listedUser.id} key={listedUser.id}>{listedUser.name} — {listedUser.role}</option>)}</select></label>
           <label className="field-wide">Description<span className="required">Required</span><textarea name="description" value={form.description} onChange={change} rows="9" required disabled={developerMode} /></label>
+          <label className="field-wide">Expected behavior<textarea name="expected_behavior" value={form.expected_behavior} onChange={change} rows="3" disabled={developerMode} placeholder="Describe the correct functional outcome" /></label>
+          <label className="field-wide">Steps to reproduce<textarea name="steps_to_reproduce" value={form.steps_to_reproduce} onChange={change} rows="4" disabled={developerMode} placeholder="List concise, repeatable steps when applicable" /></label>
+          <label>Environment<textarea name="environment" value={form.environment} onChange={change} rows="4" disabled={developerMode} placeholder="Application environment, browser, or equipment details supplied by the requester" /></label>
+          <label>Business rules<textarea name="business_rules" value={form.business_rules} onChange={change} rows="4" disabled={developerMode} placeholder="Relevant policy or calculation rules, when applicable" /></label>
+          <label className="field-wide">Acceptance criteria<textarea name="acceptance_criteria" value={form.acceptance_criteria} onChange={change} rows="4" disabled={developerMode} placeholder="State how the squad will confirm the request is complete" /></label>
         </div>
         <div className="form-actions"><Link to={editing ? `/tickets/${id}` : '/tickets'} className="button secondary">Cancel</Link><button className="button primary" disabled={saving}>{saving ? 'Saving…' : developerMode && ticket.owner_id === null ? 'Claim and start work' : editing ? 'Save changes' : 'Create ticket'}</button></div>
       </form>
