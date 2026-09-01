@@ -410,6 +410,10 @@ TF-0010
 
 Retrieves discussion and business clarifications associated with a ticket.
 
+#### `review_ticket_readiness`
+
+Applies the current TaskFlow readiness criteria and records a traceable `READY` or `NOT_READY` result.
+
 #### `start_work_on_ticket`
 
 Synchronizes the beginning of active development work with TaskFlow.
@@ -423,6 +427,12 @@ Comment → IBM Bob started working on this request through BOB IN SYNC.
 The operation is designed to be idempotent.
 
 If the ticket is already assigned to IBM Bob and already marked `IN_PROGRESS`, the MCP server avoids duplicate work-start updates and comments.
+
+As IBM Bob has the Developer role, it can claim unassigned tickets and continue tickets already assigned to IBM Bob. It refuses to take work currently assigned to another user.
+
+Before starting work, the MCP checks the ticket readiness state. A request with sufficient configured information becomes `READY` and is assigned to IBM Bob. An incomplete request becomes `NOT_READY`, receives a concise comment listing what is missing, and remains unassigned.
+
+The separate `review_ticket_readiness` MCP tool can run the same check without starting work.
 
 ---
 
@@ -579,12 +589,16 @@ npm run setup
 
 again is safe and does not replace an existing populated database.
 
+Pending forward-only migrations from `server/database/migrations/` are applied automatically by both setup and server startup. Applied versions are recorded in `schema_migrations`; add a new numbered SQL file for every future schema change.
+
 The application currently stores:
 
 ```text
 users
 tickets
 comments
+password_reset_tokens
+schema_migrations
 ```
 
 Ticket status values are:
@@ -683,7 +697,7 @@ The expected result is:
 | Command | Purpose |
 | --- | --- |
 | `npm install` | Install TaskFlow dependencies |
-| `npm run setup` | Create and seed the SQLite database if it is empty |
+| `npm run setup` | Apply database migrations and seed the database if it is empty |
 | `npm run dev` | Start the React client and Express API together |
 | `npm test` | Run backend API tests |
 | `npm run build` | Build the production frontend |
@@ -702,7 +716,15 @@ Application environment variables include:
 API_PORT
 PORT
 DATABASE_PATH
+NOTIFICATION_MODE
+NOTIFICATION_POLL_MS
+RESEND_API_KEY
+RESEND_FROM
+RESEND_REPLY_TO
+NOTIFICATION_RECIPIENT_OVERRIDE
 ```
+
+`NOTIFICATION_MODE=log` is the local default and records delivery while printing only a preview. Use `NOTIFICATION_MODE=resend` with `RESEND_API_KEY` and a verified `RESEND_FROM` address for real delivery. Copy `.env.example` to `.env`; the real file is ignored by Git. During development, `NOTIFICATION_RECIPIENT_OVERRIDE=delivered@resend.dev` safely redirects every delivery without changing the intended recipient stored in the outbox. Remove this override in production. Outbox items use a stable Resend idempotency key, are retried up to three times, and retain the provider message id for operational follow-up.
 
 The MCP server uses:
 

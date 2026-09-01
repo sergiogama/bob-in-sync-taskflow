@@ -1,5 +1,7 @@
 # TaskFlow MCP Server
 
+IBM Bob can list and inspect tickets, review request readiness, and start work. `review_ticket_readiness` records `READY` or `NOT_READY`; incomplete requests receive a `NOT READY` comment. `start_work_on_ticket` automatically runs that review when needed and assigns only a ready ticket to IBM Bob.
+
 Um servidor MCP (Model Context Protocol) **somente leitura** que permite ao IBM Bob descobrir e consultar chamados de manutenção do TaskFlow diretamente.
 
 ---

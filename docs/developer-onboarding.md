@@ -10,7 +10,7 @@ TaskFlow is an internal IT maintenance-request tracker. Staff create tickets to 
 
 **Roles defined in the database schema:** `Analyst`, `Developer`, `Manager`.
 
-In v1.0 **all three roles have identical permissions**. There is no role-based access control in any middleware, service, or model. Any authenticated user can read, create, update, and comment on any ticket.
+Ticket permissions are role-based. Analysts create and triage requests through `IN_PROGRESS`; Developers claim unassigned work or update their own tickets through `RESOLVED`; Managers have full ticket access and are the only role that can close tickets or issue password-reset tokens. Every authenticated role can read tickets and add comments. The service layer is authoritative; frontend permission helpers only keep the interface consistent with it.
 
 ---
 
@@ -191,7 +191,7 @@ All success responses wrap their payload in a named key (`ticket`, `tickets`, `u
 
 ## 8. Database Entities and Relationships
 
-Schema lives in [`server/database/schema.js`](../server/database/schema.js) and is applied with `CREATE TABLE IF NOT EXISTS` on every server start.
+Schema evolution lives in numbered SQL files under [`server/database/migrations/`](../server/database/migrations/). `migrationRunner.js` applies pending files transactionally on startup and records them in `schema_migrations`.
 
 ```
 users
@@ -318,6 +318,12 @@ Open [http://localhost:5173](http://localhost:5173). All five seed users share t
 | `API_PORT` | `3001` | API port (dev and prod; also used by the Vite proxy) |
 | `PORT` | `3001` | Production API port (checked after `API_PORT`) |
 | `DATABASE_PATH` | `data/taskflow.db` | Path to the SQLite file |
+| `NOTIFICATION_MODE` | `log` | Use `resend` for real email delivery |
+| `NOTIFICATION_POLL_MS` | `5000` | Outbox worker polling interval |
+| `NOTIFICATION_RECIPIENT_OVERRIDE` | — | Development-only redirect such as `delivered@resend.dev`; omit in production |
+| `RESEND_API_KEY` | — | Resend API key; required only in `resend` mode |
+| `RESEND_FROM` | `TaskFlow <onboarding@resend.dev>` | Verified sender required for production recipients |
+| `RESEND_REPLY_TO` | — | Optional internal support reply address |
 
 ### Running Tests
 
@@ -378,14 +384,14 @@ These are non-obvious rules observed in the codebase. Violating them will break 
 |---|---|
 | **In-memory sessions** | The session `Map` is lost on every server restart or process crash. All users are logged out. Not suitable for rolling restarts, load-balanced deployments, or multi-process setups. |
 | **No token expiry** | A token is valid indefinitely until the server restarts or the user explicitly logs out. A stolen token grants permanent access. |
-| **No RBAC enforcement** | The `role` column is stored and displayed but is never checked in middleware, services, or models. All authenticated users have full read/write access. |
+| **RBAC policy duplicated in UI and service** | The backend is authoritative, but `src/permissions.js` mirrors rules for presentation. Update both and extend API tests whenever the role matrix changes. |
 | **No request-level rate limiting or brute-force protection** | `POST /api/auth/login` has no lockout mechanism. |
 | **SQLite single-writer constraint** | WAL mode allows concurrent reads, but write operations are serialised. Under significant concurrent write load this will become a bottleneck. |
 | **No pagination on ticket list** | `GET /api/tickets` returns all matching rows. As the ticket count grows this will become slow and memory-heavy. |
 | **`created_by_id` is immutable by convention only** | The schema does not prevent `UPDATE tickets SET created_by_id = ...`. The service layer does not expose this field on update, but there is no DB-level constraint. |
 | **Seed data coupled to test assertions** | Exact record counts (12 tickets, 5 users, 13 dashboard total) are hardcoded in the test file. Adding seed records without updating the tests will cause test failures. |
-| **No migration system** | Schema is applied with `CREATE TABLE IF NOT EXISTS` on startup. There is no migration history, no down migrations, and no way to make additive schema changes to an existing database without manual intervention. |
-| **`server/scripts/setup.js` creates but never migrates** | Running `npm run setup` on a database that already has tables does nothing. Any schema change must be applied manually to existing databases. |
+| **Forward-only migrations** | Migration history is recorded and additive changes are automatic. There are no down migrations; recover destructive changes from a verified backup or add a corrective forward migration. |
+| **Migration discipline required** | Never edit an applied migration. Add a new numbered migration and validate it against both an empty and an existing database. |
 
 ---
 

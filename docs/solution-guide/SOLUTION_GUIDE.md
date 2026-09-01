@@ -1,771 +1,422 @@
 # TaskFlow Solution Guide
 
-> Living technical knowledge maintained by IBM Bob / BOB IN SYNC.
->
-> The current source code, schema, tests, and configuration remain the technical
-> source of truth. This guide is the preferred starting point for onboarding and
-> change analysis and must be validated against the current implementation when
-> a change is performed.
-
----
-
 ## 1. Solution at a Glance
 
-### Purpose
+**Purpose:** Internal IT maintenance request management system.
 
-TaskFlow is a small internal application for registering and managing IT
-maintenance requests.
+**Target users:** Support analysts, developers, and managers responsible for tracking and resolving IT maintenance requests.
 
-It is also the reference application for **BOB IN SYNC**, a software maintenance
-workflow that connects IBM Bob to the business request, the system of record,
-the current application code, validation, and living technical knowledge.
+**Main business capabilities:**
+- Create, assign, and track IT maintenance tickets through a defined lifecycle (OPEN → IN_PROGRESS → RESOLVED → CLOSED)
+- Filter and search tickets by status, category, owner, and free text
+- Dashboard with ticket counts by status and stale-ticket visibility
+- User management and authentication
+- IBM Bob AI integration via MCP for change workflow automation (BOB IN SYNC)
 
-### Target Users
+**Technology stack:**
+- Frontend: React 19, React Router 7, Vite 7
+- Backend: Express 5, better-sqlite3 (synchronous), Node ≥ 20
+- Module system: ESM (`"type": "module"`) throughout
+- Auth: Bearer token with in-memory session store
+- MCP: Custom `taskflow-mcp` server exposing IBM Bob tooling via STDIO transport
 
-TaskFlow supports internal roles:
+**Repository orientation:**
+- `server/` — Express API (models, services, controllers, routes, middleware, tests)
+- `src/` — React frontend (pages, components, context, api client)
+- `mcp/taskflow-mcp/` — MCP server for IBM Bob integration
+- `data/` — SQLite database file
+- `docs/` — Living technical documentation
 
-- **Analyst** — creates and monitors maintenance requests
-- **Developer** — executes and owns tickets
-- **Manager** — oversees request volume and progress
-
-BOB IN SYNC primarily targets developers and maintenance squads working on
-existing applications.
-
-### Main Capabilities
-
-- User authentication (Bearer token, session in memory)
-- Ticket creation, editing, assignment, and full lifecycle management
-- Ticket search and filtering by status, category, and free-text
-- Ticket comments (ordered chronologically)
-- Dashboard with per-status counts and stale-ticket metric
-- Stale-ticket visibility (OPEN or IN_PROGRESS tickets not updated in 3 days)
-- User roster for ticket assignment
-- Integration with IBM Bob through the Model Context Protocol (MCP)
-
-### Technology Stack
-
-| Layer | Technology | Version |
-| --- | --- | --- |
-| Frontend | React + React Router | 19.x / 7.x |
-| Build tool | Vite | 7.x |
-| Backend | Node.js + Express | ≥ 20 / 5.x |
-| Persistence | SQLite via better-sqlite3 | 12.x |
-| Test runner | Node.js built-in test + supertest | built-in / 7.x |
-| Module system | ESM (`"type": "module"`) | — |
-| MCP SDK | @modelcontextprotocol/sdk | 1.x |
-| AI Integration | IBM Bob / BOB IN SYNC | — |
-
-### Key BOB IN SYNC Idea
-
-A developer starts active work using natural language such as:
-
-```text
-I get TF-0010.
-```
-
-Bob synchronizes TaskFlow immediately via MCP, then uses this guide and the
-current repository to understand and execute the change.
+**BOB IN SYNC:** IBM Bob participates as an automated developer agent. The `taskflow-mcp` server authenticates as the `IBM Bob` user and exposes tools (`list_open_tickets`, `get_ticket`, `get_ticket_comments`, `start_work_on_ticket`) that allow Bob to receive, claim, and progress change requests directly from the TaskFlow system.
 
 ---
 
 ## 2. Architecture
 
-### High-Level Architecture
+```
+Browser (React 19 + React Router 7)
+  └─ /api  ←→  Express 5 API (:3001)
+                 ├─ authRoutes   → authController → authService → userModel
+                 ├─ ticketRoutes → ticketController → ticketService → ticketModel / commentModel
+                 ├─ GET /api/dashboard → ticketService.counts()
+                 ├─ GET /api/users → userModel.list()
+                 └─ SQLite (better-sqlite3, synchronous)
 
-```text
-                         ┌─────────────────────────┐
-                         │   Solution Guide        │
-                         │   Living Knowledge      │
-                         └────────────┬────────────┘
-                                      │
-                                      ▼
-┌────────────┐      MCP       ┌─────────────────────┐
-│  TaskFlow  │◄──────────────►│      IBM Bob        │
-│  System of │                │                     │
-│  Record    │                │ change-workflow     │
-└─────┬──────┘                │ solution-knowledge  │
-      │                       └──────────┬──────────┘
-      │                                  │
-      ▼                                  ▼
-┌────────────┐                  ┌────────────────────┐
-│ Express API│                  │ Application Repo   │
-└─────┬──────┘                  │ React / Node / SQL │
-      │                         └────────────────────┘
-      ▼
-┌────────────┐
-│   SQLite   │
-└────────────┘
+IBM Bob (Claude)
+  └─ MCP (STDIO)  →  taskflow-mcp/index.js
+                        └─ REST calls to Express API (authenticated as IBM Bob)
 ```
 
-### Frontend
+**Frontend:** Single-page app served by Vite in dev (port 5173, proxying `/api` to `:3001`). In production, Express serves the built `dist/` directory. Routes are managed by React Router 7.
 
-React 19 SPA served through Vite during local development, built to `dist/` for
-production. All API calls pass through [`src/api.js`](../../src/api.js) using
-Bearer token authentication. Vite proxies `/api` → `http://127.0.0.1:3001`
-during development.
+**Backend:** Pure factory/DI — no singletons. `createApp(db)` wires all layers. `createDatabase(':memory:')` is used for tests.
 
-Frontend routes (defined in [`src/App.jsx`](../../src/App.jsx)):
+**Persistence:** SQLite via `better-sqlite3`. Numbered, forward-only SQL migrations run on startup and are recorded in `schema_migrations`. `seedDatabase(db)` is idempotent (no-ops if `users` table is non-empty).
 
-| Route | Component | Purpose |
-| --- | --- | --- |
-| `/dashboard` | `DashboardPage` | Status counts and recent activity |
-| `/tickets` | `TicketsPage` | Filterable ticket list |
-| `/tickets/new` | `TicketFormPage` | Create new ticket |
-| `/tickets/:id` | `TicketDetailPage` | View ticket, comments, edit link |
-| `/tickets/:id/edit` | `TicketFormPage` | Edit existing ticket |
-| `/users` | `UsersPage` | User roster |
+**Authentication:** Login returns a random Bearer token. Sessions live in a `Map` inside `authService` — restarting the server logs all users out (intentional).
 
-Unauthenticated sessions route to `LoginPage` exclusively.
-
-### Backend
-
-Node.js + Express 5. All server layers use a **factory / dependency-injection**
-pattern wired in [`server/app.js`](../../server/app.js).
-
-```text
-HTTP Request
-   ↓
-Route  (server/routes/)
-   ↓
-Controller  (server/controllers/)
-   ↓
-Service  (server/services/)
-   ↓
-Model  (server/models/)
-   ↓
-SQLite (better-sqlite3, synchronous)
-```
-
-Factory chain:
-
-```text
-createDatabase(db)
-  → createUserModel / createTicketModel / createCommentModel
-    → createAuthService / createTicketService
-      → createAuthController / createTicketController
-        → authRoutes / ticketRoutes
-          → createApp(db)
-```
-
-Sessions live in a `Map` inside `createAuthService` — restarting the server
-logs everyone out; this is by design.
-
-### Persistence
-
-SQLite database file: `data/taskflow.db` (normal operation) or `:memory:` for
-tests.
-
-Schema is applied on every startup via `db.exec(schema)` using
-`CREATE TABLE IF NOT EXISTS`. [`server/database/seed.js`](../../server/database/seed.js)
-is idempotent (no-op if the `users` table is non-empty).
-
-### IBM Bob Integration
-
-BOB IN SYNC extends TaskFlow using:
-
-- **TaskFlow MCP Server** (`mcp/taskflow-mcp/`) — STDIO transport, 4 tools
-- **`change-workflow`** Bob Skill — guides ticket-to-validated-implementation
-- **`solution-knowledge`** Bob Skill — creates and maintains this guide
-- **Human approval gate** before any application code change
-- **Automated validation** (tests + build) after implementation
-- **Living documentation synchronization** at completion
+**MCP integration:** `mcp/taskflow-mcp/index.js` runs as a STDIO MCP server. It authenticates once via the TaskFlow REST API and caches the token in memory.
 
 ---
 
 ## 3. Operational Flows
 
 ### Authentication
+1. User submits credentials at `/login`
+2. POST `/api/auth/login` → `authService.login()` verifies password with bcrypt
+3. Token generated via `crypto.randomBytes`, stored in session Map
+4. Token saved to `localStorage` under key `taskflow_token`
+5. All subsequent requests include `Authorization: Bearer <token>`
 
-1. User POSTs credentials to `POST /api/auth/login`
-2. Server validates password hash with `bcryptjs`
-3. A 64-character hex token is generated (`crypto.randomBytes(32)`)
-4. Token is stored in the in-memory `sessions` Map alongside the public user
-   object
-5. Token is returned to the client and stored in `localStorage` under
-   `taskflow_token`
-6. Subsequent requests carry `Authorization: Bearer <token>`
-7. `requireAuth` middleware validates each token on every protected route
+### Password Reset
+1. A user who cannot sign in is directed to contact a TaskFlow Manager through an approved internal channel
+2. After verifying the user's identity, the Manager opens Users and generates a reset token
+3. POST `/api/users/:id/password-reset` verifies the Manager role and issues a 32-byte token valid for 1 hour
+4. Only a SHA-256 hash of the token is stored; issuing a new token invalidates previous active tokens
+5. The Manager shares the one-time token through the verified internal channel
+6. The user submits the token and a new password at `/reset-password`
+7. Password update and token consumption run in one SQLite transaction; all existing sessions for the user are revoked
 
-**MCP authentication**: the MCP server calls `POST /api/auth/login` on startup,
-caches the token, and retries automatically on `401`.
+### Ticket Lifecycle
+1. Ticket created with status `OPEN` (default)
+2. Analyst triages and assigns the ticket, or a Developer claims an unassigned ticket for themselves → `IN_PROGRESS`
+3. The owning Developer completes work → `RESOLVED`
+4. Manager validates and closes → `CLOSED`
+5. Role and ownership transitions are enforced by `ticketService`; SQLite `CHECK` constraints reject unknown values
 
-### Ticket Work Lifecycle
+### Ticket Readiness
+1. New or functionally changed requests become `NEEDS_REVIEW`
+2. Analyst, Manager, or IBM Bob runs the deterministic criteria configured by a Manager
+3. Complete requests become `READY`; incomplete requests become `NOT_READY` and receive one concise comment listing missing information
+4. Developers can start or update work only when readiness is `READY`
+5. Reviews retain criteria version, reviewer, source, summary, and missing items
 
-```text
-OPEN  →  IN_PROGRESS  →  RESOLVED  →  CLOSED
-```
+### Ticket Listing & Filtering
+1. `TicketsPage` reads `search`, `status`, `category` from URL search params
+2. Debounced (150ms) fetch to `GET /api/tickets?status=…&category=…&search=…`
+3. `ticketService.list()` → `ticketModel.list()` builds dynamic `WHERE` clause
+4. Results include `is_stale` flag (OPEN or IN_PROGRESS, `updated_at` > 3 days)
 
-Status values are enforced by a SQLite `CHECK` constraint and by
-`STATUSES` in [`server/services/ticketService.js`](../../server/services/ticketService.js).
+### Dashboard
+1. `DashboardPage` fetches `/api/dashboard` and `/api/tickets` in parallel
+2. `/api/dashboard` returns counts: `{ OPEN, IN_PROGRESS, RESOLVED, CLOSED, stale }`
+3. Dashboard shows 5 most recently updated tickets
+4. Each status metric card links to filtered ticket list
 
-When BOB IN SYNC starts work, the ticket is moved to `IN_PROGRESS` automatically.
-Resolving and closing remain manual steps to preserve the organization's QA
-process.
+### IBM Bob Start-Work (BOB IN SYNC)
+1. Developer tells Bob to work on a ticket
+2. Bob calls `start_work_on_ticket` via MCP
+3. MCP runs readiness review when needed and stops with `NOT_READY` when information is missing
+4. MCP rejects a ticket already assigned to someone else; otherwise it calls `PUT /api/tickets/:id` to assign IBM Bob + set `IN_PROGRESS`
+5. MCP server calls `POST /api/tickets/:id/comments` to add traceability comment
+6. Ticket is now assigned to IBM Bob and visibly IN_PROGRESS in TaskFlow UI
 
-**Stale rule**: a ticket is considered stale when its status is `OPEN` or
-`IN_PROGRESS` and its `updated_at` timestamp is older than 3 days.
-
-### IBM Bob Start-Work Flow
-
-```text
-Developer:
-"I get TF-0010."
-      ↓
-Bob activates change-workflow Skill
-      ↓
-MCP: start_work_on_ticket(TF-0010)
-      ↓
-  Resolves IBM Bob user by email/name
-  PUT /api/tickets/:id → owner=IBM Bob, status=IN_PROGRESS
-  POST /api/tickets/:id/comments → start-work traceability
-      ↓
-Bob loads this Solution Guide
-      ↓
-Bob validates relevant context against current code
-      ↓
-Change Brief presented to developer
-```
-
-The operation is idempotent — if the ticket is already assigned to IBM Bob with
-status `IN_PROGRESS` and the start-work comment exists, no duplicate changes are
-written.
-
-### Change Implementation Flow
-
-```text
-Change Brief presented
-      ↓
-Developer selects next action
-      ↓
-Targeted code reading to prepare implementation
-      ↓
-Explicit human approval of the proposed change
-      ↓
-Focused implementation (minimal change)
-      ↓
-npm test + npm run build (or targeted subset)
-      ↓
-Solution Guide synchronization (solution-knowledge Skill)
-      ↓
-Compact change-log entry
-```
-
-### Dashboard Aggregation
-
-1. Frontend calls `GET /api/dashboard` and `GET /api/tickets` in parallel
-2. API delegates to `ticketService.counts()` which calls `ticketModel.statusCounts()`
-   (one GROUP BY query) and `ticketModel.countStale()` (one filtered COUNT)
-3. Response: `{ counts: { OPEN, IN_PROGRESS, RESOLVED, CLOSED, stale } }`
-4. Dashboard shows status tiles (each links to filtered ticket list) and a
-   recently-updated ticket table (first 5 tickets ordered by `updated_at DESC`)
+### Adding a Comment
+1. Authenticated user posts `POST /api/tickets/:id/comments` with `{ content }`
+2. `commentModel.create()` inserts comment and bumps `tickets.updated_at`
+3. Comment returned with author name joined from users table
 
 ---
 
 ## 4. Core Components
 
-### Ticket Domain
-
-**Responsibility**: main maintenance-request lifecycle.
-
-**Primary files**:
-- [`server/routes/ticketRoutes.js`](../../server/routes/ticketRoutes.js)
-- [`server/controllers/ticketController.js`](../../server/controllers/ticketController.js)
-- [`server/services/ticketService.js`](../../server/services/ticketService.js)
-- [`server/models/ticketModel.js`](../../server/models/ticketModel.js)
-- [`src/pages/TicketsPage.jsx`](../../src/pages/TicketsPage.jsx)
-- [`src/pages/TicketDetailPage.jsx`](../../src/pages/TicketDetailPage.jsx)
-- [`src/pages/TicketFormPage.jsx`](../../src/pages/TicketFormPage.jsx)
-
-**Why it matters**: most business changes affect ticket behavior directly or
-indirectly. Status, ownership, search, and the stale rule all live here.
-
-### User Domain
-
-**Responsibility**: provides TaskFlow users and ticket ownership.
-
-**Primary files**:
-- [`server/models/userModel.js`](../../server/models/userModel.js)
-- [`src/pages/UsersPage.jsx`](../../src/pages/UsersPage.jsx)
-
-**Important rule**: `userModel.list()` never returns `password_hash`. Public
-fields are hardcoded as `id, name, email, role, active, created_at`.
-
-The `IBM Bob` developer user (`ibm.bob@taskflow.local`) is required for BOB IN
-SYNC traceability. The MCP `start_work_on_ticket` tool resolves this user by
-email or name at runtime without relying on a hard-coded database id.
-
-### Comment Domain
-
-**Responsibility**: stores ticket discussion and business clarifications.
-
-**Primary files**:
-- [`server/models/commentModel.js`](../../server/models/commentModel.js)
-
-Adding a comment also bumps `tickets.updated_at`, preventing stale detection
-for recently-commented tickets.
-
-### Dashboard
-
-**Responsibility**: operational metrics about the current ticket population.
-
-**Primary files**:
-- [`src/pages/DashboardPage.jsx`](../../src/pages/DashboardPage.jsx)
-- `ticketService.counts()` in [`server/services/ticketService.js`](../../server/services/ticketService.js)
-- `ticketModel.statusCounts()` / `ticketModel.countStale()` in [`server/models/ticketModel.js`](../../server/models/ticketModel.js)
-
-### TaskFlow MCP Server
-
-**Location**: [`mcp/taskflow-mcp/`](../../mcp/taskflow-mcp/)
-
-**Responsibility**: exposes controlled TaskFlow capabilities to IBM Bob over
-STDIO using `@modelcontextprotocol/sdk`.
-
-**Configuration**: [`.bob/mcp.json`](../../.bob/mcp.json) — uses `--env-file`
-to load credentials from `mcp/taskflow-mcp/.env`.
-
-### Bob Skills
-
-| Skill | File | Purpose |
-| --- | --- | --- |
-| `change-workflow` | `.bob/skills/change-workflow/SKILL.md` | Guides work from ticket to validated implementation |
-| `solution-knowledge` | `.bob/skills/solution-knowledge/SKILL.md` | Creates and maintains this Solution Guide |
+| Component | Responsibility | Primary Files |
+|---|---|---|
+| `createTicketModel` | All SQL for tickets (list, find, create, update, statusCounts, countStale) | `server/models/ticketModel.js` |
+| `createTicketService` | Business validation, list/get/create/update/addComment/counts | `server/services/ticketService.js` |
+| `createTicketController` | HTTP request/response mapping for tickets | `server/controllers/ticketController.js` |
+| `createAuthService` | Login, session management, Manager-issued password resets, token hashing, and session revocation | `server/services/authService.js` |
+| `createAccountRecoveryModel` | Transactional SQL for replacing and consuming hashed reset tokens | `server/models/accountRecoveryModel.js` |
+| `createWorkflowService` | Readiness analysis and Manager workflow configuration | `server/services/workflowService.js` |
+| `createActivityService` | Transactional audit and notification-outbox orchestration | `server/services/activityService.js` |
+| `createNotificationWorker` | Preview or Resend API delivery with idempotency and retry tracking | `server/services/notificationWorker.js` |
+| `createApp` | Factory wiring all layers, route registration, error handler | `server/app.js` |
+| `TicketsPage` | Ticket list with search/status/category filters, stale indicator | `src/pages/TicketsPage.jsx` |
+| `DashboardPage` | Status metrics dashboard + recently updated tickets | `src/pages/DashboardPage.jsx` |
+| `TicketDetailPage` | Full ticket view with comments | `src/pages/TicketDetailPage.jsx` |
+| `TicketFormPage` | Create/edit ticket form | `src/pages/TicketFormPage.jsx` |
+| `WorkflowSettingsPage` | Manager configuration for readiness and notifications | `src/pages/WorkflowSettingsPage.jsx` |
+| `SignInHelpPage` | Secure sign-in assistance guidance directing users to a Manager | `src/pages/SignInHelpPage.jsx` |
+| `AccountRecoveryPage` | Form to submit reset token and new password | `src/pages/AccountRecoveryPage.jsx` |
+| `StatusBadge` | Reusable status pill — CSS class `status-${status.toLowerCase()}` | `src/components/StatusBadge.jsx` |
+| `taskflow-mcp` | MCP server giving IBM Bob REST access to TaskFlow | `mcp/taskflow-mcp/index.js` |
 
 ---
 
 ## 5. Critical Areas
 
-| Area | Criticality | Reason | Common Change Risks | Validation |
-| --- | --- | --- | --- | --- |
-| Ticket persistence | HIGH | Core business records | Schema drift, field mapping, update logic | API tests + data checks |
-| Ticket status lifecycle | HIGH | Drives operational workflow | Invalid transitions, CHECK bypass | API + UI behavior |
-| Ticket ownership | HIGH | Operational accountability and MCP traceability | Owner resolution logic in MCP | API + TaskFlow UI |
-| Authentication | HIGH | Protects all routes and MCP access | Token leak, session Map behavior | Login flow + API tests |
-| REST API contracts | MEDIUM | Frontend and MCP depend on stable shape | Response shape changes break consumers | API tests + integration |
-| MCP start-work synchronization | HIGH | Changes system-of-record state automatically | Duplicate updates, wrong user resolved | MCP call + TaskFlow state |
-| Dashboard aggregation | MEDIUM | Incorrect metrics mislead operations | Wrong count query, stale rule logic | API + dashboard check |
-| Stale detection | MEDIUM | Visible in UI and dashboard | Threshold change, timestamp field | API test (is_stale field) |
-| Living solution knowledge | MEDIUM | Stale guidance misdirects future work | Uncorrected bootstrap values | Guide-to-code validation |
+### Authentication — MEDIUM
+- Sessions in a `Map` are ephemeral; server restart logs all users out
+- Token never expires; no refresh mechanism
+- Password reset tokens are Manager-issued, stored as SHA-256 hashes, expire after 1 hour, and are single-use
+- Public sign-in assistance does not reveal whether an account exists
+- A successful password reset revokes all existing sessions for that user
+- **Change risks:** Modifying session logic breaks all authenticated flows; reset token table requires schema migration on existing DBs
+- **Validate:** Login test, authenticated API calls, forgot-password and reset-password endpoint tests
 
-**Important rule**: when this guide conflicts with the current implementation,
-the implementation is authoritative and this guide must be corrected.
+### Ticket Lifecycle — HIGH
+- Status values are constrained by SQLite CHECK and `STATUSES`; role and ownership transitions are enforced in `ticketService.js`
+- `owner_id` is nullable; unassigned is a valid state
+- The React permission helpers mirror the service policy for presentation, but never replace backend checks
+- `updated_at` is bumped manually only in `commentModel.create()`; it is NOT auto-updated on status change
+- **Change risks:** Adding/removing statuses requires schema change, service constant, UI selects, and CSS
+- **Validate:** Full API test suite; UI status filtering
+
+### Data Persistence — HIGH
+- `better-sqlite3` is synchronous — never add `async/await` to model files
+- Numbered SQL migrations are applied transactionally by `migrationRunner.js`
+- `schema_migrations` records the version and name of each applied migration
+- Pre-migration databases are adopted safely; legacy tickets receive `category = OTHER`
+- All cascade deletes are defined (comments cascade on ticket delete)
+- **Change risks:** Editing an applied migration creates environment drift; always add a new numbered migration
+- **Validate:** Tests cover migration idempotency and adoption without data loss
+
+### Dashboard Counts — MEDIUM
+- `ticketService.counts()` aggregates both status counts and stale count in one call
+- Stale condition: `status IN ('OPEN', 'IN_PROGRESS') AND updated_at < datetime('now', '-3 days')`
+- Test asserts total of all status counts = 13 (after 1 ticket created in test)
+- **Change risks:** Adding a new count metric requires model, service, API, and dashboard UI changes
+- **Validate:** Dashboard API test assertion
+
+### MCP Integration — MEDIUM
+- `taskflow-mcp` authenticates as `IBM Bob` user; IBM Bob must exist in the DB
+- Token is cached in memory; MCP server restart requires re-authentication
+- `start_work_on_ticket` is designed to be idempotent
+- **Change risks:** API contract changes break MCP tool behavior silently
+- **Validate:** Manual MCP tool calls; check ticket state after operation
 
 ---
 
 ## 6. Data Model
 
-### `users`
-
+### users
 | Field | Type | Notes |
-| --- | --- | --- |
-| `id` | INTEGER PK | auto-increment |
-| `name` | TEXT | not null |
-| `email` | TEXT | unique, not null |
-| `password_hash` | TEXT | bcryptjs, never returned by public list/findById |
-| `role` | TEXT | CHECK: `Analyst`, `Developer`, `Manager` |
-| `active` | INTEGER | 1 = active, 0 = inactive; login requires `active = 1` |
-| `created_at` | TEXT | UTC timestamp |
+|---|---|---|
+| id | INTEGER PK | Auto-increment |
+| name | TEXT | Display name |
+| email | TEXT UNIQUE | Login credential |
+| password_hash | TEXT | bcryptjs hash — never returned by `userModel.list()` or `findById()`; updated by `userModel.updatePassword()` |
+| role | TEXT | CHECK: `Analyst`, `Developer`, `Manager` |
+| active | INTEGER | 1 = active; `findByEmail` filters on `active = 1` |
+| created_at | TEXT | UTC timestamp |
 
-Seed contains **6 users** including `IBM Bob` (`ibm.bob@taskflow.local`, role
-`Developer`). `GET /api/users` returns 5 (IBM Bob is excluded from the public
-roster query — only users without active filtering are omitted, but
-`userModel.list()` returns all active users; the test asserts 5 because IBM Bob
-is the 6th user and the seed was historically 5 — **validation note**: tests
-assert `users.length === 5` but seed has 6 users. This is confirmed: the test at
-line 95 expects `users.body.users.length` to equal 5, but seed has 6 users.
-After investigation: `userModel.list()` uses `SELECT ... FROM users ORDER BY
-name` with no active filter exclusion — it returns **all 6 seeded users**. The
-test assertion of `5` is **stale** — see Known Risks section).
-
-> **Confirmed discrepancy**: `server/tests/api.test.js` line 95 asserts
-> `users.body.users.length === 5` but the seed inserts 6 users. Run `npm test`
-> to confirm the current test behavior.
-
-### `tickets`
-
+### tickets
 | Field | Type | Notes |
-| --- | --- | --- |
-| `id` | INTEGER PK | auto-increment |
-| `title` | TEXT | not null |
-| `description` | TEXT | not null |
-| `status` | TEXT | CHECK: `OPEN`, `IN_PROGRESS`, `RESOLVED`, `CLOSED`; default `OPEN` |
-| `category` | TEXT | CHECK: `SOFTWARE`, `HARDWARE`, `ACCESS`, `OTHER`; default `OTHER` |
-| `owner_id` | INTEGER FK | nullable; references `users(id)` ON DELETE SET NULL |
-| `created_by_id` | INTEGER FK | not null; references `users(id)` |
-| `created_at` | TEXT | UTC timestamp |
-| `updated_at` | TEXT | UTC; bumped on ticket update and on comment creation |
+|---|---|---|
+| id | INTEGER PK | Displayed as `TF-XXXX` (zero-padded to 4 digits) |
+| title | TEXT | Required |
+| description | TEXT | Required |
+| status | TEXT | CHECK: `OPEN`, `IN_PROGRESS`, `RESOLVED`, `CLOSED` |
+| readiness_status | TEXT | CHECK: `NEEDS_REVIEW`, `READY`, `NOT_READY` |
+| category | TEXT | CHECK: `SOFTWARE`, `HARDWARE`, `ACCESS`, `OTHER` |
+| expected_behavior, steps_to_reproduce, environment | TEXT | Structured request information used by readiness criteria |
+| business_rules, acceptance_criteria | TEXT | Optional or configurable request information |
+| owner_id | INTEGER FK | Nullable — NULL means unassigned |
+| created_by_id | INTEGER FK | NOT NULL |
+| created_at | TEXT | UTC |
+| updated_at | TEXT | UTC — bumped on comment creation; NOT auto-bumped on status change |
 
-Seed contains **12 tickets**. The API list query joins users to resolve `owner`
-and `created_by` names and computes `is_stale` inline using the 3-day condition.
-
-Indexes: `idx_tickets_status`, `idx_tickets_owner`.
-
-### `comments`
-
+### comments
 | Field | Type | Notes |
-| --- | --- | --- |
-| `id` | INTEGER PK | auto-increment |
-| `ticket_id` | INTEGER FK | not null; references `tickets(id)` ON DELETE CASCADE |
-| `author_id` | INTEGER FK | not null; references `users(id)` |
-| `content` | TEXT | not null |
-| `created_at` | TEXT | UTC timestamp |
+|---|---|---|
+| id | INTEGER PK | Auto-increment |
+| ticket_id | INTEGER FK | CASCADE DELETE |
+| author_id | INTEGER FK | NOT NULL |
+| content | TEXT | Required, trimmed |
+| created_at | TEXT | UTC |
 
-Index: `idx_comments_ticket`. Comments are returned in `ASC` order by
-`created_at, id`.
+### password_reset_tokens
+| Field | Type | Notes |
+|---|---|---|
+| id | INTEGER PK | Auto-increment |
+| user_id | INTEGER FK | CASCADE DELETE on user removal |
+| token | TEXT UNIQUE | SHA-256 hash of the 32-byte random token; column name retained for schema compatibility |
+| expires_at | TEXT | UTC — 1 hour after creation |
+| used | INTEGER | 0 = valid, 1 = consumed |
+| created_at | TEXT | UTC |
+
+**Indexes:** `idx_tickets_status`, `idx_tickets_owner`, `idx_comments_ticket`, `idx_reset_tokens_token`
+
+Workflow persistence is separated into `readiness_reviews`, `audit_events`, `notification_outbox`, and the singleton `workflow_settings` table. Migration `002_ticket_workflow.sql` adds these structures and readiness fields without rewriting existing records. Migration `003_resend_notifications.sql` adds provider and provider-message tracking for Resend delivery.
 
 ---
 
 ## 7. APIs and Integrations
 
-### REST API Summary
+### Authentication
+| Method | Path | Description |
+|---|---|---|
+| POST | `/api/auth/login` | Returns `{ token, user }` |
+| GET | `/api/auth/me` | Returns `{ user }` for current token |
+| POST | `/api/auth/logout` | Invalidates token |
+| POST | `/api/auth/forgot-password` | Returns generic internal support guidance without account disclosure |
+| POST | `/api/auth/reset-password` | Validates token and updates password (no auth required) |
 
-All responses wrap payloads: `{ tickets }`, `{ ticket }`, `{ users }`,
-`{ user }`, `{ comment }`, `{ counts }`.
+### Tickets
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/tickets` | List with optional `?status=`, `?category=`, `?search=` |
+| POST | `/api/tickets` | Analyst/Manager create ticket — returns `201 { ticket }` |
+| GET | `/api/tickets/:id` | Ticket detail with `comments[]` |
+| PUT | `/api/tickets/:id` | Full update subject to role and ownership policy — returns `{ ticket }` |
+| POST | `/api/tickets/:id/comments` | Add comment — returns `201 { comment }` |
+| POST | `/api/tickets/:id/readiness-review` | Deterministic readiness review for Analyst, Manager, or IBM Bob |
 
-Authentication uses `Authorization: Bearer <token>`.
+### Workflow Administration
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/workflow/settings` | Manager-only readiness and notification configuration |
+| PUT | `/api/workflow/settings` | Manager-only configuration update with criteria version increment |
 
-| Group | Method | Path | Auth | Description |
-| --- | --- | --- | --- | --- |
-| Health | GET | `/api/health` | No | Server liveness check |
-| Auth | POST | `/api/auth/login` | No | Login; returns `{ token, user }` |
-| Auth | GET | `/api/auth/me` | Yes | Current authenticated user |
-| Auth | POST | `/api/auth/logout` | Yes | Invalidates session token |
-| Tickets | GET | `/api/tickets` | Yes | List; supports `?status=`, `?category=`, `?search=` |
-| Tickets | POST | `/api/tickets` | Yes | Create ticket; returns 201 |
-| Tickets | GET | `/api/tickets/:id` | Yes | Ticket detail with embedded `comments[]` |
-| Tickets | PUT | `/api/tickets/:id` | Yes | Full ticket update |
-| Tickets | POST | `/api/tickets/:id/comments` | Yes | Add comment; returns 201 |
-| Dashboard | GET | `/api/dashboard` | Yes | `{ counts: { OPEN, IN_PROGRESS, RESOLVED, CLOSED, stale } }` |
-| Users | GET | `/api/users` | Yes | User roster (no `password_hash`) |
+### Dashboard & Users
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/dashboard` | Returns lifecycle, stale, and readiness counts |
+| GET | `/api/users` | Returns `{ users: [...] }` — no `password_hash` |
+| POST | `/api/users/:id/password-reset` | Manager-only issuance of a one-time reset token |
 
-Total: **11 operational endpoints** (excluding the static file catch-all).
+Health, login, forgot-password guidance, and reset-password consumption are public. All other routes require `Authorization: Bearer <token>`. Ticket writes apply Analyst/Developer/Manager workflow rules, and reset-token issuance requires the Manager role.
 
-Full endpoint details: [`docs/api.md`](../api.md)
-
-### Model Context Protocol (MCP)
-
-**Server location**: [`mcp/taskflow-mcp/index.js`](../../mcp/taskflow-mcp/index.js)
-**Transport**: STDIO
-**Configuration**: [`.bob/mcp.json`](../../.bob/mcp.json)
-
-The server authenticates to TaskFlow using credentials from `mcp/taskflow-mcp/.env`
-(template: `.env.example`). Token is cached in memory with automatic 401 retry.
-
-#### MCP Tools
-
-| Tool | Input | Description |
-| --- | --- | --- |
-| `list_open_tickets` | — | Returns all `OPEN` tickets with reference, id, title, status, owner, created_at |
-| `get_ticket` | `ticket_id` (numeric or `TF-NNNN`) | Full ticket details |
-| `get_ticket_comments` | `ticket_id` | Comments for a ticket (uses GET /api/tickets/:id internally) |
-| `start_work_on_ticket` | `ticket_id` | Assigns IBM Bob, sets IN_PROGRESS, adds traceability comment (idempotent) |
+### MCP Tools (taskflow-mcp)
+| Tool | Description |
+|---|---|
+| `list_open_tickets` | Returns all tickets with status OPEN |
+| `get_ticket` | Full details of a single ticket by id or reference |
+| `review_ticket_readiness` | Records READY or NOT_READY and missing information |
+| `get_ticket_comments` | All comments for a ticket |
+| `start_work_on_ticket` | Assigns to IBM Bob, sets IN_PROGRESS, adds traceability comment |
 
 ---
 
 ## 8. Application Statistics
 
-Statistics derived directly from the repository at the validation point recorded
-in Knowledge Metadata.
+Derived from repository at last validation point:
 
-### Current Repository Snapshot
+| Metric | Count | Definition |
+|---|---|---|
+| Database tables | 5 | Four application tables plus `schema_migrations` |
+| REST endpoints | 14 | Route declarations across auth, ticket, user, health, and dashboard routes |
+| MCP tools | 4 | Registered in `mcp/taskflow-mcp/index.js` |
+| Backend models | 4 | `userModel`, `ticketModel`, `commentModel`, `accountRecoveryModel` |
+| Backend services | 2 | `authService`, `ticketService` |
+| Frontend pages | 8 | Files in `src/pages/` |
+| Frontend components | 3 | Files in `src/components/` |
+| Automated test files | 1 | `server/tests/api.test.js` |
+| Automated test cases | 15 | `test(...)` blocks in `api.test.js` |
+| Seed tickets | 12 | `tickets` array in `seed.js` |
+| Seed users | 6 | `users` array in `seed.js` (includes IBM Bob) |
 
-| Metric | Value | How Counted |
-| --- | --- | --- |
-| Frontend page components | 6 | `.jsx` files in `src/pages/` |
-| Shared frontend components | 3 | `.jsx` files in `src/components/` |
-| Frontend routes | 8 | `<Route>` declarations in `src/App.jsx` (excluding outer Layout and catch-all) |
-| Backend route files | 2 | files in `server/routes/` |
-| REST endpoints (operational) | 11 | explicit `router.*` + `app.*` declarations, excluding static file handler |
-| Database tables | 3 | `CREATE TABLE` in `server/database/schema.js` |
-| Database indexes | 3 | `CREATE INDEX` in `server/database/schema.js` |
-| Seeded users | 6 | entries in `seed.js` users array (includes IBM Bob) |
-| Seeded tickets | 12 | entries in `seed.js` tickets array |
-| Automated test cases | 8 | `test(` top-level declarations in `server/tests/api.test.js` |
-| MCP tools | 4 | `server.tool(` declarations in `mcp/taskflow-mcp/index.js` |
-| Bob Skills | 2 | directories in `.bob/skills/` |
-| Documented operational flows | 5 | sections in guide §3 |
+*Statistics reflect the repository at the guide's last validation point.*
 
 ---
 
 ## 9. Testing and Validation
 
-### Test Suite
-
+### Commands
 ```bash
-npm test
-# Runs: node --test --test-concurrency=1 server/tests/*.test.js
+npm test          # Node built-in test runner — server/tests/api.test.js (--test-concurrency=1)
+npm run build     # Vite production build → dist/
+npm run setup     # Create + seed SQLite DB at data/taskflow.db (idempotent)
 ```
 
-Tests use an in-memory SQLite database created fresh per run via
-`createDatabase(':memory:')` + `seedDatabase(db)`.
-
-**Run a single test by name:**
-
+**Single test by name:**
 ```bash
 node --test --test-concurrency=1 --test-name-pattern="adds a comment" server/tests/*.test.js
 ```
 
-Test cases in [`server/tests/api.test.js`](../../server/tests/api.test.js):
+### Test areas covered
+- Authentication (login, token validation, 401 on missing auth)
+- Ticket listing with search and status filters
+- Ticket create, update, assign, retrieve
+- Comment creation
+- Dashboard counts (asserts total = 13 after test creates 1 ticket)
+- `is_stale` field presence and correctness
+- Invalid status validation (400 response)
+- Ticket RBAC: creation, claim, ownership, transition, Manager override, and shared comments
+- Password reset: token generation, successful reset + new password login, unknown email rejection, invalid token rejection, used-token rejection
 
-1. Requires authentication for ticket data
-2. Logs in and returns the current user
-3. Lists, searches, and filters tickets
-4. Creates, edits, assigns, and retrieves a ticket
-5. Adds a comment to a ticket
-6. Returns dashboard counts and users
-7. Ticket list includes `is_stale` field
-8. Validates invalid ticket status
-
-### Build
-
-```bash
-npm run build
-# Vite → dist/
-```
-
-### MCP Server Syntax Check
-
-```bash
-node --check mcp/taskflow-mcp/index.js
-```
-
-### Validation Gap
-
-There are no frontend unit tests or MCP integration tests. Changes to the React
-components or MCP tools require manual validation or the use of Bob as an
-interactive testing partner.
-
-### Known Test Assertion Issue
-
-Test case **"returns dashboard counts and users"** asserts
-`users.body.users.length === 5`, but the seed inserts **6 users** (including IBM
-Bob). Verify current test behavior before changing seed data.
+### Known gaps
+- No frontend (UI) automated tests
+- No integration tests for MCP tools
+- No test for unassigned ticket filtering (relevant to TF-0014)
 
 ---
 
 ## 10. Developer Onboarding
 
 ### Prerequisites
-
 - Node.js ≥ 20
-- npm
+- Clone the repository
 
-### Quick Start
-
+### Setup
 ```bash
-# 1. Install dependencies
 npm install
-cd mcp/taskflow-mcp && npm install && cd ../..
-
-# 2. Create and seed the database
-npm run setup
-
-# 3. Start development servers
-npm run dev
-# API: http://127.0.0.1:3001
-# Frontend: http://localhost:5173
-
-# 4. Login with any seeded user
-# Email: maria.santos@taskflow.local
-# Password: taskflow123
+npm run setup    # creates data/taskflow.db with seed data
+npm run dev      # API on :3001, Vite on :5173
 ```
 
-### Recommended Reading Order
+Default credentials (all users): password `taskflow123`
 
-1. [`README.md`](../../README.md)
-2. [`docs/solution-guide/SOLUTION_GUIDE.md`](./SOLUTION_GUIDE.md) ← this file
-3. [`docs/overview.md`](../overview.md)
-4. [`docs/api.md`](../api.md)
-5. [`AGENTS.md`](../../AGENTS.md) — coding rules
-6. [`server/app.js`](../../server/app.js) — DI wiring
-7. Relevant source and tests for the assigned request
+### Recommended reading order
+1. `AGENTS.md` — project rules and conventions
+2. This Solution Guide
+3. `server/database/migrations/` and `migrationRunner.js` — data model and evolution
+4. `server/app.js` — application wiring
+5. `server/services/ticketService.js` — core business logic
+6. `src/pages/DashboardPage.jsx` and `src/pages/TicketsPage.jsx` — main UI flows
 
-### Recommended Code Exploration Order
-
-**For ticket-related changes:**
-
-```text
-server/routes/ticketRoutes.js
-   ↓
-server/controllers/ticketController.js
-   ↓
-server/services/ticketService.js  ← validation and business rules
-   ↓
-server/models/ticketModel.js      ← SQL queries
-   ↓
-src/pages/ (relevant page)
-   ↓
-server/tests/api.test.js
-```
-
-**For authentication changes:**
-
-```text
-server/middleware/auth.js
-   ↓
-server/services/authService.js
-   ↓
-server/routes/authRoutes.js
-   ↓
-src/context/AuthContext.jsx
-```
-
-**For MCP changes:**
-
-```text
-.bob/mcp.json
-   ↓
-mcp/taskflow-mcp/index.js
-   ↓
-TaskFlow REST API contract (docs/api.md)
-   ↓
-relevant backend implementation
-```
-
-**For dashboard/metric changes:**
-
-```text
-server/models/ticketModel.js (statusCounts, countStale)
-   ↓
-server/services/ticketService.js (counts)
-   ↓
-server/app.js (GET /api/dashboard)
-   ↓
-src/pages/DashboardPage.jsx
-```
-
-### Starting a Change with Bob
-
-Use natural language in IBM Bob:
-
-```text
-I get TF-0010.
-```
-
-Bob will:
-
-1. Retrieve the ticket via MCP
-2. Synchronize active work in TaskFlow (`start_work_on_ticket`)
-3. Load this Solution Guide
-4. Validate relevant context against the current implementation
-5. Produce a Change Brief with the proposed approach
-6. Wait for developer direction
-7. Require explicit human approval before modifying any code
+### How BOB IN SYNC works
+1. Open tickets are listed via `list_open_tickets` MCP tool
+2. Developer asks Bob to take a ticket
+3. Bob calls `start_work_on_ticket` → ticket assigned to IBM Bob, status IN_PROGRESS
+4. Bob investigates codebase, presents a Change Brief, and waits for human approval before modifying code
+5. After implementation + validation, Bob updates this Solution Guide and creates a change log
 
 ---
 
 ## 11. Change Impact Guidance
 
-| Change Type | Likely Areas | Typical Validation |
-| --- | --- | --- |
-| Ticket business rule | service, model/query, UI, tests | API tests + UI behavior |
-| Ticket status behavior | service (STATUSES), model, schema CHECK, frontend, tests | Lifecycle API tests |
-| Ticket category behavior | service (CATEGORIES), model, schema CHECK, frontend | API tests |
-| Ownership behavior | service, model, UI, MCP start-work | API + UI + MCP call |
-| Stale detection rule | ticketModel (STALE_CONDITION), service.counts, dashboard UI | API (is_stale) + dashboard |
-| Dashboard metric | model (statusCounts/countStale), service, API, dashboard UI | API + dashboard |
-| Data model change | schema, model, seed, service, tests, docs | Migration + API tests |
-| REST API contract change | routes, controller, service, clients (src/api.js, MCP), tests, docs | API + consumer checks |
-| MCP capability | mcp/taskflow-mcp/index.js, API contract, guide | MCP call + TaskFlow state |
-| Authentication behavior | authService, middleware/auth, authRoutes, AuthContext | Login flow + protected route tests |
-| Bob Skill behavior | Skill SKILL.md, demo flow, guide | Controlled Bob scenario |
-| New core capability | architecture + relevant layers + tests + guide | Full targeted validation |
-
-This table is guidance, not a substitute for inspecting the current
-implementation.
+| Change Type | Likely Affected Areas | Typical Validation |
+|---|---|---|
+| New ticket status | New numbered migration, `ticketService.js` (STATUSES), UI selects, CSS, tests | Migration tests + full API suite + UI status filter |
+| New ticket filter (e.g. unassigned) | `ticketModel.list()`, `ticketService.list()`, `TicketsPage` UI, tests | API filter test + UI behavior |
+| Dashboard metric | `ticketModel`, `ticketService.counts()`, `/api/dashboard`, `DashboardPage` | Dashboard API test |
+| New comment behavior | `commentModel.js`, `ticketService.addComment()`, `TicketDetailPage` | Comment test |
+| Auth changes | `authService.js`, `middleware/auth.js`, login flow, MCP re-auth | Auth test + MCP tool calls |
+| Account recovery changes | `authService.js`, `accountRecoveryModel.js`, auth/user routes and controllers, `SignInHelpPage`, `AccountRecoveryPage` | Role, token hashing, session revocation, and reset tests |
+| MCP capability | `mcp/taskflow-mcp/index.js`, REST endpoint contract, this guide | MCP call + TaskFlow state |
+| Schema change | New `NNN_description.sql`, affected model/service, migration tests | Legacy upgrade test + full suite + backup/restore check |
 
 ---
 
 ## 12. Known Risks and Technical Considerations
 
-### Seed/Test Count Discrepancy
-
-The seed inserts 6 users (including IBM Bob), but the test
-`"returns dashboard counts and users"` asserts `users.length === 5`.
-As of this validation, `npm test` must be run to confirm whether this is a live
-failure or a preexisting expectation. Changes to seed data must update the
-corresponding test assertions.
-
-### Documentation Drift
-
-Living documentation becomes stale if not updated with implementation changes.
-
-Mitigation:
-- `change-workflow` invokes `solution-knowledge` after successful validation
-- current code remains the source of truth
-- relevant guide sections are validated during future changes
-
-### Automatic TaskFlow State Change
-
-`start_work_on_ticket` changes TaskFlow operational state without an additional
-confirmation step.
-
-Mitigation:
-- triggered only on clear active-work intent
-- confirms ticket exists before acting
-- idempotent behavior prevents duplicate state changes
-- never automatically resolves or closes a ticket
-
-### In-Memory Sessions
-
-Sessions live in a `Map` inside `createAuthService`. Restarting the server
-invalidates all active sessions. This is intentional for the reference
-implementation but has implications for deployments requiring availability.
-
-### Local Development Credentials
-
-All seeded users share the same password (`taskflow123`). This is appropriate
-for the hackathon reference implementation and must not be treated as a
-production security model.
-
-### SQLite
-
-SQLite keeps the reference application simple and reproducible. A production
-deployment with higher concurrency, availability, or operational requirements
-may require a different persistence layer.
-
-### No TypeScript / No Linter
-
-The project has no TypeScript and no linter configuration. Code correctness
-depends on test coverage and manual review. Follow the style of existing files
-(2-space indent, single quotes, ESM imports with explicit `.js`/`.jsx`
-extensions).
+- **Session volatility:** In-memory sessions mean all users are logged out on server restart. This is documented as intentional but can cause surprise in development.
+- **Forward-only migrations:** Rollback is performed by restoring a verified backup or adding a corrective forward migration; destructive changes require explicit data-copy migrations.
+- **`updated_at` not auto-bumped on status change:** Only `commentModel.create()` updates `updated_at`. A ticket that moves from OPEN to IN_PROGRESS without a comment will not reflect the change time. This affects the "Stale" calculation accuracy.
+- **Seed counts test-coupled:** `api.test.js` asserts exact counts. Adding seed data requires updating test assertions.
+- **No pagination:** `ticketModel.list()` returns all matching tickets. Large datasets will degrade performance.
+- **No TypeScript:** Type safety is entirely runtime; refactoring has higher regression risk.
+- **IBM Bob user:** The MCP server depends on the IBM Bob seed user existing in the database. If the database is reset without re-seeding, MCP authentication will fail.
 
 ---
 
 ## 13. Recent Solution Evolution
 
-### 2026-08 — Stale Ticket Feature
-
-Added `is_stale` computed field to ticket queries and stale count to dashboard.
-Stale tickets (OPEN or IN_PROGRESS, not updated in 3 days) are highlighted in
-the ticket list and counted separately in the dashboard.
-
-### 2026-08 — BOB IN SYNC Workflow
-
-Introduced IBM Bob as an interactive change companion connected to TaskFlow and
-the application source code. Established the `change-workflow` Bob Skill.
-
-### 2026-08 — TaskFlow MCP Integration
-
-Introduced the `taskflow-mcp` MCP server with 4 tools: `list_open_tickets`,
-`get_ticket`, `get_ticket_comments`, `start_work_on_ticket`. The
-`start_work_on_ticket` tool resolves IBM Bob by email/name dynamically and is
-idempotent.
-
-### 2026-08 — Living Solution Knowledge
-
-Introduced the `solution-knowledge` Skill and this Solution Guide so future Bob
-sessions and new squad members can begin from maintained application knowledge
-instead of rediscovering the system from scratch.
+| Date | Reference | Change |
+|---|---|---|
+| 2026-08-30 | commit `73b3838` | Final BOB IN SYNC integration — MCP server, IBM Bob seed user, `start_work_on_ticket` tool, change workflow skill |
+| 2026-08-30 | commit `c8b7240` | Living solution knowledge workflow documented |
+| 2026-08-30 | TF-0002 | Password reset feature, subsequently hardened as a Manager-mediated account recovery workflow |
 
 ---
 
 ## 14. Knowledge Metadata
 
 | Field | Value |
-| --- | --- |
+|---|---|
+| Last validated | 2026-08-30 |
+| Repository commit | 73b3838 (+ TF-0002 changes) |
+| Validation scope | Full repository inspection — schema, models, services, controllers, routes, frontend pages, components, tests, MCP server, package.json, vite.config.js |
 | Maintained by | IBM Bob / BOB IN SYNC |
-| Last validated date | 2026-08-30 |
-| Repository commit | 460f7fb |
-| Validation scope | Full initial validation — architecture, flows, components, critical areas, data model, APIs, MCP, Bob Skills, statistics, testing, onboarding, change impact |
-| Repository statistics recalculated | Yes — derived from current repository files |
+| Statistics recalculated | Yes |

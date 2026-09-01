@@ -2,10 +2,11 @@
 /**
  * TaskFlow MCP Server
  *
- * Exposes three MCP tools for IBM Bob:
+ * Exposes TaskFlow tools for IBM Bob:
  *   - list_open_tickets
  *   - get_ticket
  *   - get_ticket_comments
+ *   - review_ticket_readiness
  *   - start_work_on_ticket
  *
  * Authentication: POST /api/auth/login (Bearer token cached in memory).
@@ -64,6 +65,7 @@ async function apiFetch(path, { method = 'GET', body } = {}) {
   async function request(token) {
     const headers = {
       Authorization: `Bearer ${token}`,
+      'X-TaskFlow-Source': 'IBM_BOB',
     }
 
     const options = {
@@ -168,6 +170,12 @@ server.tool(
       title: t.title,
       description: t.description,
       status: t.status,
+      readiness_status: t.readiness_status,
+      expected_behavior: t.expected_behavior,
+      steps_to_reproduce: t.steps_to_reproduce,
+      environment: t.environment,
+      business_rules: t.business_rules,
+      acceptance_criteria: t.acceptance_criteria,
       owner: t.owner || null,
       created_by: t.created_by,
       created_at: t.created_at,
@@ -175,6 +183,31 @@ server.tool(
     }
     return {
       content: [{ type: 'text', text: JSON.stringify({ ticket: result }, null, 2) }],
+    }
+  }
+)
+
+// ── Tool: review_ticket_readiness ────────────────────────────────────────────
+
+server.tool(
+  'review_ticket_readiness',
+  'Evaluate whether a TaskFlow ticket contains the configured information required to begin work. ' +
+    'Records READY or NOT_READY. A NOT_READY result adds a concise comment explaining what is missing.',
+  { ticket_id: z.string().describe('Ticket id — numeric (14) or reference format (TF-0014)') },
+  async ({ ticket_id }) => {
+    const id = parseTicketId(ticket_id)
+    const result = await apiFetch(`/api/tickets/${id}/readiness-review`, { method: 'POST' })
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify({
+          reference: ticketRef(id),
+          readiness_status: result.ticket.readiness_status,
+          summary: result.review.summary,
+          missing_information: result.review.missing_information,
+          unchanged: result.unchanged,
+        }, null, 2),
+      }],
     }
   }
 )
@@ -237,7 +270,7 @@ server.tool(
       apiFetch('/api/users'),
     ])
 
-    const ticket = ticketData.ticket
+    let ticket = ticketData.ticket
     const users = usersData.users || []
 
     // Locate IBM Bob without relying on a hard-coded database id.
@@ -259,6 +292,26 @@ server.tool(
       )
     }
 
+    if (ticket.readiness_status !== 'READY') {
+      const readiness = await apiFetch(`/api/tickets/${id}/readiness-review`, { method: 'POST' })
+      ticket = readiness.ticket
+      if (ticket.readiness_status !== 'READY') {
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              reference: ticketRef(id),
+              started: false,
+              readiness_status: ticket.readiness_status,
+              summary: readiness.review.summary,
+              missing_information: readiness.review.missing_information,
+              message: 'IBM Bob did not start work because the request is NOT READY.',
+            }, null, 2),
+          }],
+        }
+      }
+    }
+
     // Detect whether ownership/status already reflect active Bob work.
     const ownerAlreadyBob =
       ticket.owner_id === bob.id ||
@@ -267,6 +320,19 @@ server.tool(
       String(ticket.owner || '').trim().toLowerCase() === 'ibm bob'
 
     const statusAlreadyInProgress = ticket.status === 'IN_PROGRESS'
+
+    if (ticket.status === 'CLOSED') {
+      throw new Error(
+        `TaskFlow ticket ${ticketRef(id)} is closed. Only a Manager can reopen a closed ticket.`
+      )
+    }
+
+    if (ticket.owner_id !== null && !ownerAlreadyBob) {
+      throw new Error(
+        `TaskFlow ticket ${ticketRef(id)} is already assigned to ${ticket.owner || 'another user'}. ` +
+          'IBM Bob can only start work on unassigned tickets or tickets already assigned to IBM Bob.'
+      )
+    }
 
     let ticketUpdated = false
     let updatedTicket = ticket
@@ -280,6 +346,11 @@ server.tool(
           status: 'IN_PROGRESS',
           category: ticket.category,
           owner_id: bob.id,
+          expected_behavior: ticket.expected_behavior,
+          steps_to_reproduce: ticket.steps_to_reproduce,
+          environment: ticket.environment,
+          business_rules: ticket.business_rules,
+          acceptance_criteria: ticket.acceptance_criteria,
         },
       })
 

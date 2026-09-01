@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 
 export default function LoginPage() {
@@ -25,6 +26,7 @@ export default function LoginPage() {
           <label>Email address<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus /></label>
           <label>Password<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required /></label>
           <button className="button primary full" disabled={submitting}>{submitting ? 'Signing in…' : 'Sign in'}</button>
+          <div className="login-link"><Link to="/forgot-password" className="muted">Need help signing in?</Link></div>
         </form>
         <div className="login-help"><strong>Demo access</strong><br />Use the pre-filled credentials. All seeded users share this password.</div>
       </div>

@@ -55,6 +55,8 @@ export function seedDatabase(db) {
     tickets.forEach((ticket, index) => {
       const offset = `-${12 - index} days`;
       insertTicket.run(...ticket, offset, offset);
+      db.prepare("UPDATE tickets SET readiness_status = 'READY', review_summary = 'Seeded request ready for demonstration.' WHERE id = ?")
+        .run(index + 1);
     });
     comments.forEach((comment, index) => insertComment.run(...comment, `-${8 - index} days`));
   })();

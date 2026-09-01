@@ -21,7 +21,7 @@ NODE_ENV=production npm start  # serve API + built dist on :3001
 node --test --test-concurrency=1 --test-name-pattern="adds a comment" server/tests/*.test.js
 ```
 
-**Env vars:** `API_PORT` (dev + prod), `PORT` (prod only), `DATABASE_PATH`.
+**Env vars:** `API_PORT` (dev + prod), `PORT` (prod only), `DATABASE_PATH`, `NOTIFICATION_MODE` (`log` or `resend`), `NOTIFICATION_POLL_MS`, optional `NOTIFICATION_RECIPIENT_OVERRIDE`, `RESEND_API_KEY`, `RESEND_FROM`, and optional `RESEND_REPLY_TO`. Root `.env` is loaded with dotenv and must never be committed.
 
 ## Architecture
 
@@ -52,10 +52,13 @@ All successful responses wrap their payload:
 
 Canonical values (enforced by SQLite CHECK and service validation): `OPEN`, `IN_PROGRESS`, `RESOLVED`, `CLOSED` — exported from [`server/services/ticketService.js`](server/services/ticketService.js) as `STATUSES`.
 
+Ticket readiness is an independent workflow dimension: `NEEDS_REVIEW`, `READY`, `NOT_READY`. Developers may start or update work only on `READY` tickets. Readiness criteria are stored in `workflow_settings`; Managers configure them through `/settings/workflow`.
+
 ## Database
 
 - SQLite via `better-sqlite3` (synchronous API — no `async/await` in models).
-- Schema applied on every startup via `db.exec(schema)` using `CREATE TABLE IF NOT EXISTS`.
+- Forward-only SQL migrations live in `server/database/migrations/` and are applied on startup by `migrationRunner.js`.
+- Applied versions are recorded in `schema_migrations`; never edit an applied migration. Add the next numbered file.
 - Ticket `updated_at` is bumped manually when a comment is added (see [`server/models/commentModel.js`](server/models/commentModel.js)).
 - SQLite dates are stored as `TEXT` in UTC; the frontend normalises them with `value.includes('T') ? value : \`${value.replace(' ', 'T')}Z\`` before passing to `Intl.DateTimeFormat`.
 
